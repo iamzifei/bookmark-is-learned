@@ -1,6 +1,6 @@
 # 📚 收藏到就是学到
 
-> 一款 Chrome 浏览器扩展，在你收藏 X (Twitter) 内容时，自动生成 AI 摘要，让每次收藏都变成一次学习。
+> 一款 Chrome 浏览器扩展，在你收藏 X (Twitter) 内容时，自动生成 AI 摘要并保存为本地 Markdown 文件，让每次收藏都变成一次学习。
 
 [English](#english) | 中文
 
@@ -47,16 +47,70 @@
 | 引用/转发帖 | 自动获取被引用帖的完整内容一并总结 |
 | 帖子串 (Thread) | 后台抓取整个 Thread 内容 |
 
+## Markdown 文件格式
+
+每次收藏会自动保存一个 `.md` 文件到 `Downloads/bookmark-is-learned/`，文件结构如下：
+
+```markdown
+# 作者名 或 文章标题
+
+> **Author**: 作者名
+> **Source**: https://x.com/user/status/123456
+> **Date**: 2025-01-15 14:30
+
+---
+
+## TLDR
+
+AI 生成的结构化摘要（要点、流程、事实核查评分）
+
+---
+
+## Original Content
+
+原文完整内容
+
+### Quoted Content (by 被引用作者)
+
+被引用/转发的完整内容（如有）
+```
+
+## 工作原理
+
+```
+用户点击收藏 → 内容脚本检测点击 → 提取推文内容（展开折叠、抓取全文）
+     ↓
+后台脚本接收 → 如有长文/引用帖，后台标签页抓取完整内容
+     ↓
+调用 LLM API → 生成结构化 TLDR 摘要
+     ↓
+┌─────────────────────────────────────────┐
+│  ① 页面右下角弹出 TLDR 卡片            │
+│  ② 保存到插件历史记录                   │
+│  ③ 下载 Markdown 文件到本地             │
+└─────────────────────────────────────────┘
+```
+
+## 默认模型
+
+| 模型提供商 | 默认模型 |
+|-----------|---------|
+| OpenAI | `gpt-4o-mini` |
+| Claude | `claude-sonnet-4-20250514` |
+| Kimi | `moonshot-v1-8k` |
+
+可在设置中自定义模型版本（如 `gpt-4o`、`claude-opus-4-20250514` 等）。
+
 ## 项目结构
 
 ```
 bookmark-is-learned/
 ├── manifest.json      # Chrome 扩展配置 (Manifest V3)
-├── background.js      # 后台 Service Worker（API 调用、内容抓取、历史保存）
+├── background.js      # 后台 Service Worker（API 调用、内容抓取、历史保存、Markdown 下载）
 ├── content.js         # 内容脚本（收藏检测、DOM 提取、卡片 UI）
 ├── content.css        # 内容脚本样式（卡片堆叠、深色模式）
 ├── popup.html         # 弹出页面（设置 + 历史记录）
-├── popup.js           # 弹出页面逻辑
+├── popup.js           # 弹出页面逻辑（标签切换、历史浏览）
 ├── popup.css          # 弹出页面样式
 └── icons/             # 扩展图标
     ├── icon16.png
@@ -82,7 +136,7 @@ MIT License
 
 # 📚 Bookmark Is Learned
 
-> A Chrome extension that automatically generates AI-powered TLDR summaries when you bookmark content on X (Twitter) — turning every bookmark into a learning moment.
+> A Chrome extension that automatically generates AI-powered TLDR summaries and saves local Markdown files when you bookmark content on X (Twitter) — turning every bookmark into a learning moment.
 
 [中文](#) | English
 
@@ -129,16 +183,70 @@ MIT License
 | Quoted/Retweeted posts | Fetches the complete quoted post and summarizes both |
 | Threads | Fetches the full thread content from the background |
 
+## Markdown File Format
+
+Each bookmark automatically saves a `.md` file to `Downloads/bookmark-is-learned/`:
+
+```markdown
+# Author Name or Article Title
+
+> **Author**: Author Name
+> **Source**: https://x.com/user/status/123456
+> **Date**: 2025-01-15 14:30
+
+---
+
+## TLDR
+
+AI-generated structured summary (key points, processes, fact-check score)
+
+---
+
+## Original Content
+
+Full original text
+
+### Quoted Content (by Quoted Author)
+
+Full quoted/retweeted content (if applicable)
+```
+
+## How It Works
+
+```
+User clicks bookmark → Content script detects click → Extract tweet (expand, fetch full text)
+     ↓
+Background receives → If article/quoted post, fetch full content via background tab
+     ↓
+Call LLM API → Generate structured TLDR summary
+     ↓
+┌──────────────────────────────────────────────────┐
+│  ① Show TLDR card at bottom-right of page        │
+│  ② Save to extension history                     │
+│  ③ Download Markdown file to local disk           │
+└──────────────────────────────────────────────────┘
+```
+
+## Default Models
+
+| Provider | Default Model |
+|----------|--------------|
+| OpenAI | `gpt-4o-mini` |
+| Claude | `claude-sonnet-4-20250514` |
+| Kimi | `moonshot-v1-8k` |
+
+You can override the model version in settings (e.g. `gpt-4o`, `claude-opus-4-20250514`).
+
 ## Project Structure
 
 ```
 bookmark-is-learned/
 ├── manifest.json      # Chrome extension config (Manifest V3)
-├── background.js      # Service worker (API calls, content fetching, history)
+├── background.js      # Service worker (API calls, content fetching, history, Markdown download)
 ├── content.js         # Content script (bookmark detection, DOM extraction, card UI)
 ├── content.css        # Content script styles (card stacking, dark mode)
 ├── popup.html         # Popup page (settings + history tabs)
-├── popup.js           # Popup page logic
+├── popup.js           # Popup page logic (tab switching, history browsing)
 ├── popup.css          # Popup page styles
 └── icons/             # Extension icons
     ├── icon16.png
