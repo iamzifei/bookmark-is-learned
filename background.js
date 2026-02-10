@@ -8,10 +8,11 @@ const MAX_HISTORY = 200;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GENERATE_TLDR') {
     handleTLDRRequest(message.tweetData, message.articleUrl, message.quotedTweetUrl)
-      .then((tldr) => {
-        // Save to history in the background (don't block the response)
-        saveToHistory(message.tweetData, tldr, !!message.articleUrl);
-        sendResponse({ success: true, tldr });
+      .then((result) => {
+        // Save to history and download markdown in the background (non-blocking)
+        saveToHistory(message.tweetData, result.tldr, result.isArticle);
+        saveMarkdownFile(message.tweetData, result.tldr, result.articleContent, result.quotedFullContent, result.isArticle);
+        sendResponse({ success: true, tldr: result.tldr });
       })
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true; // keep sendResponse channel open for async
@@ -53,6 +54,112 @@ async function saveToHistory(tweetData, tldr, isArticle) {
   }
 }
 
+// ── Markdown file download ───────────────────────────────────────────────────
+
+async function saveMarkdownFile(tweetData, tldr, articleContent, quotedFullContent, isArticle) {
+  try {
+    var author = tweetData.author || 'unknown';
+    var tweetUrl = tweetData.tweetUrl || tweetData.url || '';
+    var now = new Date();
+    var dateStr = now.getFullYear() + '-'
+      + String(now.getMonth() + 1).padStart(2, '0') + '-'
+      + String(now.getDate()).padStart(2, '0') + ' '
+      + String(now.getHours()).padStart(2, '0') + ':'
+      + String(now.getMinutes()).padStart(2, '0');
+
+    // ── Build Markdown ────────────────────────────────────────────────────
+
+    var lines = [];
+
+    // Title
+    var title = isArticle && articleContent && articleContent.title
+      ? articleContent.title
+      : author;
+    lines.push('# ' + title);
+    lines.push('');
+
+    // Metadata block
+    lines.push('> **Author**: ' + author);
+    lines.push('> **Source**: ' + tweetUrl);
+    lines.push('> **Date**: ' + dateStr);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+
+    // TLDR section (at the top as requested)
+    lines.push('## TLDR');
+    lines.push('');
+    lines.push(tldr);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+
+    // Original content section
+    lines.push('## Original Content');
+    lines.push('');
+
+    // Main tweet / article text
+    if (isArticle && articleContent) {
+      if (articleContent.title) {
+        lines.push('### ' + articleContent.title);
+        lines.push('');
+      }
+      lines.push(articleContent.body);
+    } else if (tweetData.text) {
+      lines.push(tweetData.text);
+    } else if (tweetData.cardText) {
+      lines.push(tweetData.cardText);
+    } else if (tweetData.fallbackText) {
+      lines.push(tweetData.fallbackText);
+    }
+    lines.push('');
+
+    // Quoted content (if present)
+    var quotedBody = quotedFullContent && quotedFullContent.body
+      ? quotedFullContent.body
+      : (tweetData.quotedText || '');
+    if (quotedBody) {
+      var quotedBy = tweetData.quotedAuthor || 'unknown';
+      lines.push('### Quoted Content (by ' + quotedBy + ')');
+      lines.push('');
+      lines.push(quotedBody);
+      lines.push('');
+    }
+
+    // Card text (if separate from main text)
+    if (!isArticle && tweetData.text && tweetData.cardText) {
+      lines.push('### Attached Card');
+      lines.push('');
+      lines.push(tweetData.cardText);
+      lines.push('');
+    }
+
+    var markdown = lines.join('\n');
+
+    // ── Download as .md file ──────────────────────────────────────────────
+
+    // Sanitize author name for filename (remove line breaks, special chars)
+    var safeAuthor = author.replace(/[\n\r]/g, ' ').replace(/[\\/:*?"<>|]/g, '_').trim().slice(0, 40);
+    var timeStamp = now.getFullYear()
+      + String(now.getMonth() + 1).padStart(2, '0')
+      + String(now.getDate()).padStart(2, '0')
+      + '-' + String(now.getHours()).padStart(2, '0')
+      + String(now.getMinutes()).padStart(2, '0')
+      + String(now.getSeconds()).padStart(2, '0');
+    var filename = 'bookmark-is-learned/' + safeAuthor + '-' + timeStamp + '.md';
+
+    var dataUrl = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(markdown);
+    await chrome.downloads.download({
+      url: dataUrl,
+      filename: filename,
+      saveAs: false,
+      conflictAction: 'uniquify',
+    });
+  } catch (_) {
+    // Markdown download failure is non-critical — silently ignore
+  }
+}
+
 // ── Main handler ────────────────────────────────────────────────────────────────
 
 async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
@@ -89,16 +196,23 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
   const prompt = buildPrompt(tweetData, articleContent, quotedFullContent, settings.language, isArticle, hasQuotedFull);
   const maxTokens = (isArticle || hasQuotedFull) ? 2000 : 1000;
 
+  let tldr;
   switch (settings.provider) {
     case 'openai':
-      return await callOpenAI(settings.apiKey, settings.model || 'gpt-4o-mini', prompt, maxTokens);
+      tldr = await callOpenAI(settings.apiKey, settings.model || 'gpt-4o-mini', prompt, maxTokens);
+      break;
     case 'claude':
-      return await callClaude(settings.apiKey, settings.model || 'claude-sonnet-4-20250514', prompt, maxTokens);
+      tldr = await callClaude(settings.apiKey, settings.model || 'claude-sonnet-4-20250514', prompt, maxTokens);
+      break;
     case 'kimi':
-      return await callKimi(settings.apiKey, settings.model || 'moonshot-v1-8k', prompt, maxTokens);
+      tldr = await callKimi(settings.apiKey, settings.model || 'moonshot-v1-8k', prompt, maxTokens);
+      break;
     default:
       throw new Error('不支持的模型: ' + settings.provider);
   }
+
+  // Return full context so the caller can save markdown and history
+  return { tldr, articleContent, quotedFullContent, isArticle };
 }
 
 // ── Page content fetching (articles & quoted tweets) ────────────────────────────
