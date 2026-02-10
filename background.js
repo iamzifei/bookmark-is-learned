@@ -263,6 +263,9 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
     case 'kimi':
       tldr = await callKimi(apiKey, settings.model || 'moonshot-v1-8k', prompt, maxTokens);
       break;
+    case 'zhipu':
+      tldr = await callZhipu(apiKey, settings.model || 'glm-4-flash', prompt, maxTokens);
+      break;
     default:
       throw new Error('不支持的模型: ' + settings.provider);
   }
@@ -555,6 +558,28 @@ async function callKimi(apiKey, model, prompt, maxTokens) {
   if (!res.ok) {
     var err = await res.json().catch(function () { return {}; });
     throw new Error((err.error && err.error.message) || 'Kimi API error: ' + res.status);
+  }
+  var data = await res.json();
+  return data.choices[0].message.content;
+}
+
+async function callZhipu(apiKey, model, prompt, maxTokens) {
+  var res = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        { role: 'system', content: prompt.system },
+        { role: 'user', content: prompt.user },
+      ],
+      max_tokens: maxTokens,
+      temperature: 0.3,
+    }),
+  });
+  if (!res.ok) {
+    var err = await res.json().catch(function () { return {}; });
+    throw new Error((err.error && err.error.message) || '智谱 API error: ' + res.status);
   }
   var data = await res.json();
   return data.choices[0].message.content;
