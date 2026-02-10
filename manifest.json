@@ -3,7 +3,11 @@
   "name": "收藏到就是学到",
   "version": "1.0.0",
   "description": "自动总结你在 X 上收藏的内容，让每次收藏都变成学习",
-  "permissions": ["storage", "scripting", "downloads"],
+  "permissions": [
+    "storage",
+    "scripting",
+    "downloads"
+  ],
   "host_permissions": [
     "https://x.com/*",
     "https://twitter.com/*",
@@ -16,9 +20,16 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://x.com/*", "https://twitter.com/*"],
-      "js": ["content.js"],
-      "css": ["content.css"]
+      "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ]
     }
   ],
   "action": {
@@ -29,5 +40,9 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ]
 }

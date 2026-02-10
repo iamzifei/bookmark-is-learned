@@ -64,6 +64,7 @@ async function migrateAndLoadSettings() {
     apiKey: '',
     language: 'zh-CN',
     model: '',
+    baseUrl: '',
     autoDownloadMd: true,
   });
 
@@ -90,6 +91,7 @@ async function migrateAndLoadSettings() {
   document.getElementById('apiKey').value = apiKeyPlain;
   document.getElementById('language').value = syncData.language;
   document.getElementById('model').value = syncData.model;
+  document.getElementById('baseUrl').value = syncData.baseUrl || '';
   document.getElementById('autoDownloadMd').checked = syncData.autoDownloadMd;
   updateModelHint(syncData.provider);
 }
@@ -131,26 +133,103 @@ function toggleKeyVisibility() {
 }
 
 async function saveSettings() {
-  const apiKeyPlain = document.getElementById('apiKey').value.trim();
+  try {
+    const apiKeyPlain = document.getElementById('apiKey').value.trim();
+    const baseUrlInput = document.getElementById('baseUrl').value.trim();
 
-  if (!apiKeyPlain) {
-    showStatus('\u8BF7\u586B\u5199 API Key', 'error');
-    return;
+    if (!apiKeyPlain) {
+      showStatus('\u8BF7\u586B\u5199 API Key', 'error');
+      return;
+    }
+
+    var baseUrl = '';
+    if (baseUrlInput) {
+      baseUrl = normalizeBaseUrl(baseUrlInput);
+      if (!baseUrl) {
+        showStatus('Base URL 格式无效', 'error');
+        return;
+      }
+    }
+
+    // Encrypt API key and store in local storage (device-only)
+    var encrypted = await encryptApiKey(apiKeyPlain);
+    await chrome.storage.local.set({ encryptedApiKey: encrypted });
+
+    // Store non-sensitive settings in sync storage
+    await chrome.storage.sync.set({
+      provider: document.getElementById('provider').value,
+      language: document.getElementById('language').value,
+      model: document.getElementById('model').value.trim(),
+      baseUrl: baseUrl,
+      autoDownloadMd: document.getElementById('autoDownloadMd').checked,
+    });
+
+    // Save should succeed even when permission is not granted yet.
+    // Permission is requested afterwards so values never get lost.
+    if (baseUrl) {
+      var permissionResult = await ensureOriginPermission(toOriginPattern(baseUrl));
+      if (!permissionResult.granted) {
+        showStatus('设置已保存，请授权 Base URL 域名访问权限', 'success');
+        return;
+      }
+    }
+
+    showStatus('\u8BBE\u7F6E\u5DF2\u4FDD\u5B58', 'success');
+  } catch (_) {
+    showStatus('保存失败，请重试', 'error');
   }
+}
 
-  // Encrypt API key and store in local storage (device-only)
-  var encrypted = await encryptApiKey(apiKeyPlain);
-  await chrome.storage.local.set({ encryptedApiKey: encrypted });
+function normalizeBaseUrl(value) {
+  try {
+    var normalizedInput = value;
+    if (!/^https?:\/\//i.test(normalizedInput)) {
+      normalizedInput = 'https://' + normalizedInput;
+    }
 
-  // Store non-sensitive settings in sync storage
-  await chrome.storage.sync.set({
-    provider: document.getElementById('provider').value,
-    language: document.getElementById('language').value,
-    model: document.getElementById('model').value.trim(),
-    autoDownloadMd: document.getElementById('autoDownloadMd').checked,
+    var url = new URL(normalizedInput);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      return '';
+    }
+    var path = url.pathname.replace(/\/+$/, '');
+    return url.origin + (path === '/' ? '' : path);
+  } catch (_) {
+    return '';
+  }
+}
+
+function toOriginPattern(baseUrl) {
+  var parsed = new URL(baseUrl);
+  return parsed.origin + '/*';
+}
+
+function ensureOriginPermission(originPattern) {
+  return new Promise(function (resolve) {
+    if (!chrome.permissions || !chrome.permissions.contains || !chrome.permissions.request) {
+      resolve({ granted: false });
+      return;
+    }
+
+    chrome.permissions.contains({ origins: [originPattern] }, function (hasPermission) {
+      if (chrome.runtime.lastError) {
+        resolve({ granted: false });
+        return;
+      }
+
+      if (hasPermission) {
+        resolve({ granted: true });
+        return;
+      }
+
+      chrome.permissions.request({ origins: [originPattern] }, function (granted) {
+        if (chrome.runtime.lastError) {
+          resolve({ granted: false });
+          return;
+        }
+        resolve({ granted: !!granted });
+      });
+    });
   });
-
-  showStatus('\u8BBE\u7F6E\u5DF2\u4FDD\u5B58', 'success');
 }
 
 function showStatus(message, type) {

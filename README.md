@@ -10,6 +10,7 @@
 
 - **一键摘要** — 点击收藏按钮，自动生成结构化 TLDR 摘要（要点提炼、步骤流程、事实核查评分）
 - **多模型支持** — 支持 OpenAI (GPT)、Claude (Anthropic)、Kimi (月之暗面) 三大模型
+- **自定义 Base URL** — 支持配置中转 API 地址，可走私有网关或代理服务
 - **深度内容提取** — 自动展开"显示更多"折叠内容，支持 X Articles 长文、引用/转发长帖的全文抓取
 - **卡片堆叠** — 支持连续快速收藏，多张 TLDR 卡片同时显示，互不阻塞
 - **历史记录** — 自动保存所有摘要，随时回顾，附带原帖链接
@@ -31,7 +32,7 @@
 
 ## 使用方法
 
-1. **设置** — 点击扩展图标，选择 AI 模型，填入 API Key，选择摘要语言
+1. **设置** — 点击扩展图标，选择 AI 模型，填入 API Key，可选填写 Base URL，选择摘要语言
 2. **收藏** — 在 X (Twitter) 时间线上，点击任意推文的收藏/书签按钮
 3. **阅读摘要** — 页面右下角会弹出 TLDR 卡片，包含要点提炼和事实核查
 4. **查看历史** — 点击扩展图标，切换到「历史记录」标签页
@@ -101,6 +102,11 @@ AI 生成的结构化摘要（要点、流程、事实核查评分）
 
 可在设置中自定义模型版本（如 `gpt-4o`、`claude-opus-4-20250514` 等）。
 
+可选配置 `Base URL` 以使用中转服务：
+- 填写 `https://your-proxy.com/v1` 时，将自动补全为对应模型接口
+- 也可直接填写完整接口地址，如 `https://your-proxy.com/v1/chat/completions`
+- 首次保存会弹出权限授权，用于访问你填写的域名
+
 ## 项目结构
 
 ```
@@ -146,6 +152,7 @@ MIT License
 
 - **One-Click Summaries** — Bookmark a post and instantly get a structured TLDR (key points, step-by-step processes, fact-check scoring)
 - **Multi-Model Support** — Choose between OpenAI (GPT), Claude (Anthropic), and Kimi (Moonshot)
+- **Custom Base URL** — Route requests through your API proxy or private gateway
 - **Deep Content Extraction** — Auto-expands "Show more" truncated text, fetches full X Articles, and retrieves complete quoted/retweeted long posts
 - **Card Stacking** — Bookmark multiple posts in rapid succession — each TLDR loads independently as a stacked card
 - **History** — All summaries are saved automatically with links back to the original posts
@@ -167,7 +174,7 @@ MIT License
 
 ## Usage
 
-1. **Configure** — Click the extension icon, select your AI model, enter your API key, and choose the summary language
+1. **Configure** — Click the extension icon, select your AI model, enter your API key, optionally set Base URL, and choose the summary language
 2. **Bookmark** — On the X (Twitter) timeline, click the bookmark button on any post
 3. **Read** — A TLDR card appears at the bottom-right corner with key insights and a fact-check score
 4. **Browse History** — Click the extension icon and switch to the "History" tab
@@ -236,6 +243,11 @@ Call LLM API → Generate structured TLDR summary
 | Kimi | `moonshot-v1-8k` |
 
 You can override the model version in settings (e.g. `gpt-4o`, `claude-opus-4-20250514`).
+
+Optional `Base URL` for proxy routing:
+- `https://your-proxy.com/v1` will be expanded to the model-specific endpoint
+- Full endpoint is also supported, e.g. `https://your-proxy.com/v1/chat/completions`
+- The first save triggers a permission prompt for the custom domain
 
 ## Project Structure
 

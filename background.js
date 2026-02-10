@@ -7,6 +7,11 @@ const MAX_HISTORY = 200;
 
 // Allowed hostnames for background tab fetching (security whitelist)
 const ALLOWED_FETCH_HOSTS = ['x.com', 'twitter.com', 'mobile.twitter.com'];
+const PROVIDER_DEFAULT_ENDPOINTS = {
+  openai: 'https://api.openai.com/v1/chat/completions',
+  claude: 'https://api.anthropic.com/v1/messages',
+  kimi: 'https://api.moonshot.cn/v1/chat/completions',
+};
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GENERATE_TLDR') {
@@ -213,6 +218,7 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
     provider: 'openai',
     language: 'zh-CN',
     model: '',
+    baseUrl: '',
   });
 
   // Read encrypted API key from local storage
@@ -251,17 +257,18 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
   const hasQuotedFull = !!(quotedFullContent && quotedFullContent.body);
   const prompt = buildPrompt(tweetData, articleContent, quotedFullContent, settings.language, isArticle, hasQuotedFull);
   const maxTokens = (isArticle || hasQuotedFull) ? 2000 : 1000;
+  const endpoint = await resolveApiEndpoint(settings.provider, settings.baseUrl);
 
   let tldr;
   switch (settings.provider) {
     case 'openai':
-      tldr = await callOpenAI(apiKey, settings.model || 'gpt-4o-mini', prompt, maxTokens);
+      tldr = await callOpenAI(apiKey, endpoint, settings.model || 'gpt-4o-mini', prompt, maxTokens);
       break;
     case 'claude':
-      tldr = await callClaude(apiKey, settings.model || 'claude-sonnet-4-20250514', prompt, maxTokens);
+      tldr = await callClaude(apiKey, endpoint, settings.model || 'claude-sonnet-4-20250514', prompt, maxTokens);
       break;
     case 'kimi':
-      tldr = await callKimi(apiKey, settings.model || 'moonshot-v1-8k', prompt, maxTokens);
+      tldr = await callKimi(apiKey, endpoint, settings.model || 'moonshot-v1-8k', prompt, maxTokens);
       break;
     default:
       throw new Error('不支持的模型: ' + settings.provider);
@@ -269,6 +276,59 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
 
   // Return full context so the caller can save markdown and history
   return { tldr, articleContent, quotedFullContent, isArticle };
+}
+
+async function resolveApiEndpoint(provider, baseUrl) {
+  if (!baseUrl) return PROVIDER_DEFAULT_ENDPOINTS[provider];
+
+  var parsed;
+  try {
+    parsed = new URL(baseUrl);
+  } catch (_) {
+    throw new Error('Base URL 格式无效，请在设置中重新填写');
+  }
+
+  await ensureBaseUrlPermission(parsed.origin);
+
+  var path = parsed.pathname.replace(/\/+$/, '');
+  if (/\/v1\/(chat\/completions|messages)$/i.test(path)) {
+    return parsed.origin + path;
+  }
+
+  var suffix = provider === 'claude' ? '/messages' : '/chat/completions';
+  if (/\/v1$/i.test(path)) {
+    return parsed.origin + path + suffix;
+  }
+  if (!path || path === '/') {
+    return parsed.origin + '/v1' + suffix;
+  }
+  return parsed.origin + path + suffix;
+}
+
+function ensureBaseUrlPermission(origin) {
+  return new Promise(function (resolve, reject) {
+    if (!chrome.permissions || !chrome.permissions.contains || !chrome.permissions.request) {
+      resolve();
+      return;
+    }
+
+    var originPattern = origin + '/*';
+    chrome.permissions.contains({ origins: [originPattern] }, function (hasPermission) {
+      if (chrome.runtime.lastError) {
+        reject(new Error('Base URL 权限检查失败，请重新保存设置'));
+        return;
+      }
+
+      if (hasPermission) {
+        resolve();
+        return;
+      }
+
+      // Service worker context has no reliable user gesture for permission prompt.
+      // The permission is requested in popup save flow.
+      reject(new Error('Base URL 缺少域名权限，请在插件设置中重新保存并授权'));
+    });
+  });
 }
 
 // ── Page content fetching (articles & quoted tweets) ────────────────────────────
@@ -493,8 +553,8 @@ function buildPrompt(tweetData, articleContent, quotedFullContent, language, isA
 
 // ── LLM API calls ───────────────────────────────────────────────────────────────
 
-async function callOpenAI(apiKey, model, prompt, maxTokens) {
-  var res = await fetch('https://api.openai.com/v1/chat/completions', {
+async function callOpenAI(apiKey, endpoint, model, prompt, maxTokens) {
+  var res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
     body: JSON.stringify({
@@ -515,8 +575,8 @@ async function callOpenAI(apiKey, model, prompt, maxTokens) {
   return data.choices[0].message.content;
 }
 
-async function callClaude(apiKey, model, prompt, maxTokens) {
-  var res = await fetch('https://api.anthropic.com/v1/messages', {
+async function callClaude(apiKey, endpoint, model, prompt, maxTokens) {
+  var res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -538,8 +598,8 @@ async function callClaude(apiKey, model, prompt, maxTokens) {
   return data.content[0].text;
 }
 
-async function callKimi(apiKey, model, prompt, maxTokens) {
-  var res = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+async function callKimi(apiKey, endpoint, model, prompt, maxTokens) {
+  var res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
     body: JSON.stringify({

@@ -32,6 +32,12 @@
         </div>
 
         <div class="form-group">
+          <label for="baseUrl">Base URL <span class="optional">(可选)</span></label>
+          <input type="text" id="baseUrl" placeholder="例如 https://your-proxy.com/v1" />
+          <div class="hint">留空使用官方 API 地址，填写后走自定义中转地址</div>
+        </div>
+
+        <div class="form-group">
           <label for="apiKey">API Key</label>
           <div class="input-wrapper">
             <input type="password" id="apiKey" placeholder="输入你的 API Key" />
