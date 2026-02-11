@@ -9,7 +9,8 @@
     "https://twitter.com/*",
     "https://api.openai.com/*",
     "https://api.anthropic.com/*",
-    "https://api.moonshot.cn/*"
+    "https://api.moonshot.cn/*",
+    "https://open.bigmodel.cn/*"
   ],
   "background": {
     "service_worker": "background.js"

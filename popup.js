@@ -6,6 +6,7 @@ const DEFAULT_MODELS = {
   openai: 'gpt-4o-mini',
   claude: 'claude-sonnet-4-20250514',
   kimi: 'moonshot-v1-8k',
+  zhipu: 'glm-4-flash',
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────
