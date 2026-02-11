@@ -599,6 +599,49 @@ select {
   color: var(--error);
 }
 
+/* ── Footer (version + repo link) ────────────────────────────────────────── */
+
+.popup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.footer-repo-link {
+  display: flex;
+  align-items: center;
+  color: var(--text-hint);
+  transition: color 0.15s;
+}
+
+.footer-repo-link:hover {
+  color: var(--text-primary);
+}
+
+.footer-version {
+  font-size: 11px;
+  color: var(--text-hint);
+}
+
+.footer-update-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.footer-update-badge:hover {
+  background: var(--accent-hover);
+}
+
 /* ── History tab ─────────────────────────────────────────────────────────── */
 
 .history-list {

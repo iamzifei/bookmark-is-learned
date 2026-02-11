@@ -15,7 +15,8 @@
     "https://api.openai.com/*",
     "https://api.anthropic.com/*",
     "https://api.moonshot.cn/*",
-    "https://open.bigmodel.cn/*"
+    "https://open.bigmodel.cn/*",
+    "https://api.github.com/*"
   ],
   "background": {
     "service_worker": "background.js"

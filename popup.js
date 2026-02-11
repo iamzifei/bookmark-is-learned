@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('clearFolderBtn').addEventListener('click', clearFolder);
   document.getElementById('nativeSetupBtn').addEventListener('click', downloadInstallScript);
   document.getElementById('copyDebugBtn').addEventListener('click', copyDebugInfo);
+  initFooter();
 
   // Listen for storage changes so the UI updates when background saves
   // the folder path (after the native picker dialog completes).
@@ -459,6 +460,73 @@ async function copyDebugInfo() {
     sel.removeAllRanges();
     sel.addRange(range);
   }
+}
+
+// ── Footer: version display + update check ───────────────────────────────────
+
+var UPDATE_CHECK_REPO = 'iamzifei/bookmark-is-learned';
+
+function initFooter() {
+  var manifest = chrome.runtime.getManifest();
+  document.getElementById('versionLabel').textContent = 'v' + manifest.version;
+  checkForUpdate(manifest.version);
+}
+
+// Compare the local extension version against the latest GitHub release.
+// Uses a 24-hour cache in chrome.storage.local to avoid hitting the API
+// every time the popup opens.
+async function checkForUpdate(currentVersion) {
+  try {
+    var cacheData = await chrome.storage.local.get('updateCheck');
+    var cache = cacheData.updateCheck;
+    var now = Date.now();
+
+    // Use cached result if checked within the last 24 hours
+    if (cache && cache.checkedAt && (now - cache.checkedAt) < 24 * 60 * 60 * 1000) {
+      if (cache.latestVersion && isNewerVersion(cache.latestVersion, currentVersion)) {
+        showUpdateBadge(cache.latestVersion);
+      }
+      return;
+    }
+
+    var res = await fetch(
+      'https://api.github.com/repos/' + UPDATE_CHECK_REPO + '/releases/latest',
+      { headers: { Accept: 'application/vnd.github.v3+json' } }
+    );
+    if (!res.ok) return;
+
+    var data = await res.json();
+    var latestTag = (data.tag_name || '').replace(/^v/, '');
+    if (!latestTag) return;
+
+    // Cache the result for 24 hours
+    await chrome.storage.local.set({
+      updateCheck: { latestVersion: latestTag, checkedAt: now },
+    });
+
+    if (isNewerVersion(latestTag, currentVersion)) {
+      showUpdateBadge(latestTag);
+    }
+  } catch (_) {
+    // Network error or API failure — silently ignore
+  }
+}
+
+// Simple semver comparison: returns true if remote > local
+function isNewerVersion(remote, local) {
+  var r = remote.split('.').map(Number);
+  var l = local.split('.').map(Number);
+  for (var i = 0; i < 3; i++) {
+    if ((r[i] || 0) > (l[i] || 0)) return true;
+    if ((r[i] || 0) < (l[i] || 0)) return false;
+  }
+  return false;
+}
+
+function showUpdateBadge(version) {
+  var badge = document.getElementById('updateBadge');
+  badge.textContent = 'v' + version + ' 可用';
+  badge.style.display = 'inline-block';
 }
 
 // ── Install script generator ──────────────────────────────────────────────────
