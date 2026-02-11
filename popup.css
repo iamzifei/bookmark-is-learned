@@ -161,6 +161,59 @@ body {
   display: block;
 }
 
+/* ── Settings card (visual section grouping) ─────────────────────────────── */
+
+.settings-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.settings-card-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-hint);
+  margin-bottom: 12px;
+}
+
+/* Remove bottom margin from last form-group inside a card */
+.settings-card > .form-group:last-child {
+  margin-bottom: 0;
+}
+
+/* Inputs inside cards use primary bg for contrast against card bg */
+.settings-card select,
+.settings-card input[type='text'],
+.settings-card input[type='password'] {
+  background: var(--bg-primary);
+}
+
+/* Folder picker button inside card also uses primary bg */
+.settings-card .pick-folder-btn {
+  background: var(--bg-primary);
+}
+
+/* Native setup block inside card uses primary bg */
+.settings-card .native-setup {
+  background: var(--bg-primary);
+}
+
+/* ── 2-column row for compact dropdowns ──────────────────────────────────── */
+
+.form-row-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.form-row-2col .form-group {
+  margin-bottom: 10px;
+}
+
 /* ── Form (settings tab) ─────────────────────────────────────────────────── */
 
 .form-group {
@@ -351,7 +404,7 @@ select {
 /* ── Collapsible sections (details/summary) ──────────────────────────────── */
 
 .settings-section {
-  margin-top: 14px;
+  margin-bottom: 12px;
   border: 1px solid var(--border-color);
   border-radius: 10px;
   overflow: hidden;
@@ -510,6 +563,7 @@ select {
 .save-btn {
   width: 100%;
   padding: 9px;
+  margin-top: 2px;
   background: var(--accent);
   color: #fff;
   border: none;
