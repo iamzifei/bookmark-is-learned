@@ -4,20 +4,29 @@
 
 [English](#english) | 中文
 
+<a href="https://x.com/JamesAI/status/2021089989136875810">查看 X 发布帖</a>
+
+### 演示视频
+
+<video src="assets/demo.mp4" width="100%" controls></video>
+
 ---
 
 ## 功能特点
 
 - **一键摘要** — 点击收藏按钮，自动生成结构化 TLDR 摘要（要点提炼、步骤流程、事实核查评分）
-- **多模型支持** — 支持 OpenAI (GPT)、Claude (Anthropic)、Kimi (月之暗面) 三大模型
+- **原文模式** — 支持切换为原文模式，跳过 AI 摘要，直接保存完整原文到 Markdown（无需 API Key）
+- **多模型支持** — 支持 OpenAI (GPT)、Claude (Anthropic)、Kimi (月之暗面)、智谱 (GLM) 四大模型
 - **自定义 Base URL** — 支持配置中转 API 地址，可走私有网关或代理服务
 - **深度内容提取** — 自动展开"显示更多"折叠内容，支持 X Articles 长文、引用/转发长帖的全文抓取
 - **卡片堆叠** — 支持连续快速收藏，多张 TLDR 卡片同时显示，互不阻塞
 - **历史记录** — 自动保存所有摘要，随时回顾，附带原帖链接
 - **Markdown 归档** — 每次收藏自动下载 Markdown 文件到本地，包含 TLDR + 原文，方便知识管理
+- **自定义保存路径** — 通过 Native Helper 可选择任意本地文件夹保存 Markdown 文件
 - **多语言摘要** — 支持简体中文、繁體中文、English、日本語、한국어
-- **深色模式** — 跟随系统偏好自动切换
+- **深色模式** — 跟随系统偏好自动切换，支持手动切换（自动/浅色/深色）
 - **事实核查** — 每条摘要末尾附带可信度评分 (1-10)
+- **安全存储** — API Key 通过 AES-GCM 加密存储在本地，不会同步到云端
 
 ## 安装方法
 
@@ -32,11 +41,28 @@
 
 ## 使用方法
 
-1. **设置** — 点击扩展图标，选择 AI 模型，填入 API Key，可选填写 Base URL，选择摘要语言
-2. **收藏** — 在 X (Twitter) 时间线上，点击任意推文的收藏/书签按钮
-3. **阅读摘要** — 页面右下角会弹出 TLDR 卡片，包含要点提炼和事实核查
-4. **查看历史** — 点击扩展图标，切换到「历史记录」标签页
-5. **本地归档** — 每次收藏自动下载 Markdown 文件到 `Downloads/bookmark-is-learned/` 目录
+1. **设置** — 点击扩展图标，选择 AI 模型，填入 API Key，选择摘要语言和保存模式
+2. **选择模式** — TLDR 摘要模式（默认）会生成 AI 摘要；原文模式直接保存完整原文
+3. **收藏** — 在 X (Twitter) 时间线上，点击任意推文的收藏/书签按钮
+4. **阅读摘要** — 页面右下角会弹出 TLDR 卡片，包含要点提炼和事实核查
+5. **查看历史** — 点击扩展图标，切换到「历史记录」标签页
+6. **本地归档** — 每次收藏自动下载 Markdown 文件到本地
+
+### 自定义保存路径（可选）
+
+默认保存到 `Downloads/bookmark-is-learned/` 目录。如需保存到其他文件夹：
+
+1. 在高级设置中点击「一键下载安装脚本」
+2. 在终端运行 `bash ~/Downloads/install-btl-native.sh`
+3. 重启浏览器
+4. 在高级设置中点击「选择文件夹」，选择任意本地目录
+
+## 保存模式
+
+| 模式 | 说明 |
+|------|------|
+| TLDR 摘要模式 | 调用 AI 生成结构化摘要，Markdown 包含 TLDR + 原文（需要 API Key） |
+| 原文模式 | 跳过 AI 调用，Markdown 只保存完整原文（无需 API Key） |
 
 ## 支持的内容类型
 
@@ -50,8 +76,9 @@
 
 ## Markdown 文件格式
 
-每次收藏会自动保存一个 `.md` 文件到 `Downloads/bookmark-is-learned/`，文件结构如下：
+每次收藏会自动保存一个 `.md` 文件，文件结构如下：
 
+**TLDR 摘要模式：**
 ```markdown
 # 作者名 或 文章标题
 
@@ -76,6 +103,25 @@ AI 生成的结构化摘要（要点、流程、事实核查评分）
 被引用/转发的完整内容（如有）
 ```
 
+**原文模式：**
+```markdown
+# 作者名 或 文章标题
+
+> **Author**: 作者名
+> **Source**: https://x.com/user/status/123456
+> **Date**: 2025-01-15 14:30
+
+---
+
+## Original Content
+
+原文完整内容
+
+### Quoted Content (by 被引用作者)
+
+被引用/转发的完整内容（如有）
+```
+
 ## 工作原理
 
 ```
@@ -83,10 +129,15 @@ AI 生成的结构化摘要（要点、流程、事实核查评分）
      ↓
 后台脚本接收 → 如有长文/引用帖，后台标签页抓取完整内容
      ↓
-调用 LLM API → 生成结构化 TLDR 摘要
+┌─ TLDR 模式 ──────────────────────────────────┐
+│  调用 LLM API → 生成结构化 TLDR 摘要         │
+└──────────────────────────────────────────────┘
+┌─ 原文模式 ───────────────────────────────────┐
+│  跳过 API 调用，直接使用原文                  │
+└──────────────────────────────────────────────┘
      ↓
 ┌─────────────────────────────────────────┐
-│  ① 页面右下角弹出 TLDR 卡片            │
+│  ① 页面右下角弹出卡片                  │
 │  ② 保存到插件历史记录                   │
 │  ③ 下载 Markdown 文件到本地             │
 └─────────────────────────────────────────┘
@@ -99,6 +150,7 @@ AI 生成的结构化摘要（要点、流程、事实核查评分）
 | OpenAI | `gpt-4o-mini` |
 | Claude | `claude-sonnet-4-20250514` |
 | Kimi | `moonshot-v1-8k` |
+| 智谱 | `glm-4-flash` |
 
 可在设置中自定义模型版本（如 `gpt-4o`、`claude-opus-4-20250514` 等）。
 
@@ -111,14 +163,16 @@ AI 生成的结构化摘要（要点、流程、事实核查评分）
 
 ```
 bookmark-is-learned/
-├── manifest.json      # Chrome 扩展配置 (Manifest V3)
-├── background.js      # 后台 Service Worker（API 调用、内容抓取、历史保存、Markdown 下载）
-├── content.js         # 内容脚本（收藏检测、DOM 提取、卡片 UI）
-├── content.css        # 内容脚本样式（卡片堆叠、深色模式）
-├── popup.html         # 弹出页面（设置 + 历史记录）
-├── popup.js           # 弹出页面逻辑（标签切换、历史浏览）
-├── popup.css          # 弹出页面样式
-└── icons/             # 扩展图标
+├── manifest.json          # Chrome 扩展配置 (Manifest V3)
+├── background.js          # 后台 Service Worker（API 调用、内容抓取、历史保存、Markdown 下载）
+├── content.js             # 内容脚本（收藏检测、DOM 提取、卡片 UI）
+├── content.css            # 内容脚本样式（卡片堆叠、深色模式）
+├── popup.html             # 弹出页面（设置 + 历史记录）
+├── popup.js               # 弹出页面逻辑（标签切换、历史浏览）
+├── popup.css              # 弹出页面样式
+├── native-host/           # Native Messaging Host（自定义文件夹写入）
+│   └── btl_file_writer.py
+└── icons/                 # 扩展图标
     ├── icon16.png
     ├── icon48.png
     └── icon128.png
@@ -131,6 +185,7 @@ bookmark-is-learned/
 | OpenAI | https://platform.openai.com/api-keys |
 | Claude | https://console.anthropic.com/settings/keys |
 | Kimi | https://platform.moonshot.cn/console/api-keys |
+| 智谱 | https://open.bigmodel.cn/usercenter/apikeys |
 
 ## 许可证
 
@@ -146,20 +201,29 @@ MIT License
 
 [中文](#) | English
 
+<a href="https://x.com/JamesAI/status/2021089989136875810">View on X</a>
+
+### Demo
+
+<video src="assets/demo.mp4" width="100%" controls></video>
+
 ---
 
 ## Features
 
 - **One-Click Summaries** — Bookmark a post and instantly get a structured TLDR (key points, step-by-step processes, fact-check scoring)
-- **Multi-Model Support** — Choose between OpenAI (GPT), Claude (Anthropic), and Kimi (Moonshot)
+- **Original Text Mode** — Switch to Original mode to save the full original text directly to Markdown without AI summarization (no API Key required)
+- **Multi-Model Support** — Choose between OpenAI (GPT), Claude (Anthropic), Kimi (Moonshot), and Zhipu (GLM)
 - **Custom Base URL** — Route requests through your API proxy or private gateway
 - **Deep Content Extraction** — Auto-expands "Show more" truncated text, fetches full X Articles, and retrieves complete quoted/retweeted long posts
 - **Card Stacking** — Bookmark multiple posts in rapid succession — each TLDR loads independently as a stacked card
 - **History** — All summaries are saved automatically with links back to the original posts
 - **Markdown Export** — Each bookmark is automatically saved as a local Markdown file (TLDR + original content) for knowledge management
+- **Custom Save Path** — Install the Native Helper to save Markdown files to any local folder
 - **Multi-Language** — Summaries available in Simplified Chinese, Traditional Chinese, English, Japanese, and Korean
-- **Dark Mode** — Follows your system preference automatically
+- **Dark Mode** — Follows your system preference automatically, with manual toggle (auto/light/dark)
 - **Fact Check** — Every summary includes a credibility score (1-10)
+- **Secure Storage** — API Keys are encrypted via AES-GCM and stored locally only (never synced to the cloud)
 
 ## Installation
 
@@ -174,11 +238,28 @@ MIT License
 
 ## Usage
 
-1. **Configure** — Click the extension icon, select your AI model, enter your API key, optionally set Base URL, and choose the summary language
-2. **Bookmark** — On the X (Twitter) timeline, click the bookmark button on any post
-3. **Read** — A TLDR card appears at the bottom-right corner with key insights and a fact-check score
-4. **Browse History** — Click the extension icon and switch to the "History" tab
-5. **Local Archive** — Each bookmark is automatically saved as a Markdown file in `Downloads/bookmark-is-learned/`
+1. **Configure** — Click the extension icon, select your AI model, enter your API key, choose the summary language and save mode
+2. **Choose Mode** — TLDR mode (default) generates AI summaries; Original mode saves full original text
+3. **Bookmark** — On the X (Twitter) timeline, click the bookmark button on any post
+4. **Read** — A TLDR card appears at the bottom-right corner with key insights and a fact-check score
+5. **Browse History** — Click the extension icon and switch to the "History" tab
+6. **Local Archive** — Each bookmark is automatically saved as a Markdown file locally
+
+### Custom Save Path (Optional)
+
+By default, files are saved to `Downloads/bookmark-is-learned/`. To use a custom folder:
+
+1. Click "Download install script" in Advanced Settings
+2. Run `bash ~/Downloads/install-btl-native.sh` in Terminal
+3. Restart your browser
+4. Click "Choose Folder" in Advanced Settings to select any local directory
+
+## Save Modes
+
+| Mode | Description |
+|------|-------------|
+| TLDR Mode | Calls AI to generate structured summaries; Markdown includes TLDR + original text (requires API Key) |
+| Original Mode | Skips AI call; Markdown saves full original text only (no API Key required) |
 
 ## Supported Content Types
 
@@ -192,8 +273,9 @@ MIT License
 
 ## Markdown File Format
 
-Each bookmark automatically saves a `.md` file to `Downloads/bookmark-is-learned/`:
+Each bookmark automatically saves a `.md` file:
 
+**TLDR Mode:**
 ```markdown
 # Author Name or Article Title
 
@@ -218,6 +300,25 @@ Full original text
 Full quoted/retweeted content (if applicable)
 ```
 
+**Original Mode:**
+```markdown
+# Author Name or Article Title
+
+> **Author**: Author Name
+> **Source**: https://x.com/user/status/123456
+> **Date**: 2025-01-15 14:30
+
+---
+
+## Original Content
+
+Full original text
+
+### Quoted Content (by Quoted Author)
+
+Full quoted/retweeted content (if applicable)
+```
+
 ## How It Works
 
 ```
@@ -225,10 +326,15 @@ User clicks bookmark → Content script detects click → Extract tweet (expand,
      ↓
 Background receives → If article/quoted post, fetch full content via background tab
      ↓
-Call LLM API → Generate structured TLDR summary
+┌─ TLDR Mode ──────────────────────────────────┐
+│  Call LLM API → Generate structured TLDR      │
+└───────────────────────────────────────────────┘
+┌─ Original Mode ──────────────────────────────┐
+│  Skip API call, use original text directly    │
+└───────────────────────────────────────────────┘
      ↓
 ┌──────────────────────────────────────────────────┐
-│  ① Show TLDR card at bottom-right of page        │
+│  ① Show card at bottom-right of page             │
 │  ② Save to extension history                     │
 │  ③ Download Markdown file to local disk           │
 └──────────────────────────────────────────────────┘
@@ -241,6 +347,7 @@ Call LLM API → Generate structured TLDR summary
 | OpenAI | `gpt-4o-mini` |
 | Claude | `claude-sonnet-4-20250514` |
 | Kimi | `moonshot-v1-8k` |
+| Zhipu | `glm-4-flash` |
 
 You can override the model version in settings (e.g. `gpt-4o`, `claude-opus-4-20250514`).
 
@@ -253,14 +360,16 @@ Optional `Base URL` for proxy routing:
 
 ```
 bookmark-is-learned/
-├── manifest.json      # Chrome extension config (Manifest V3)
-├── background.js      # Service worker (API calls, content fetching, history, Markdown download)
-├── content.js         # Content script (bookmark detection, DOM extraction, card UI)
-├── content.css        # Content script styles (card stacking, dark mode)
-├── popup.html         # Popup page (settings + history tabs)
-├── popup.js           # Popup page logic (tab switching, history browsing)
-├── popup.css          # Popup page styles
-└── icons/             # Extension icons
+├── manifest.json          # Chrome extension config (Manifest V3)
+├── background.js          # Service worker (API calls, content fetching, history, Markdown download)
+├── content.js             # Content script (bookmark detection, DOM extraction, card UI)
+├── content.css            # Content script styles (card stacking, dark mode)
+├── popup.html             # Popup page (settings + history tabs)
+├── popup.js               # Popup page logic (tab switching, history browsing)
+├── popup.css              # Popup page styles
+├── native-host/           # Native Messaging Host (custom folder writing)
+│   └── btl_file_writer.py
+└── icons/                 # Extension icons
     ├── icon16.png
     ├── icon48.png
     └── icon128.png
@@ -273,6 +382,7 @@ bookmark-is-learned/
 | OpenAI | https://platform.openai.com/api-keys |
 | Claude | https://console.anthropic.com/settings/keys |
 | Kimi | https://platform.moonshot.cn/console/api-keys |
+| Zhipu | https://open.bigmodel.cn/usercenter/apikeys |
 
 ## License
 

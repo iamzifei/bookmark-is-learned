@@ -10,20 +10,25 @@
   let activeCards = []; // { id, element, timerId }
   let cardSeq = 0;
   let currentTheme = 'auto'; // 'auto' | 'light' | 'dark'
+  let currentMode = 'tldr'; // 'tldr' | 'original'
 
-  // ── Theme management ──────────────────────────────────────────────────────
+  // ── Theme & mode management ───────────────────────────────────────────────
 
-  // Load initial theme preference from storage
-  chrome.storage.sync.get({ theme: 'auto' }, function (data) {
+  // Load initial theme and mode preferences from storage
+  chrome.storage.sync.get({ theme: 'auto', mdMode: 'tldr' }, function (data) {
     currentTheme = data.theme || 'auto';
+    currentMode = data.mdMode || 'tldr';
     applyThemeToContainer();
   });
 
-  // Listen for theme changes from the popup settings
+  // Listen for setting changes from the popup
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area === 'sync' && changes.theme) {
       currentTheme = changes.theme.newValue || 'auto';
       applyThemeToContainer();
+    }
+    if (area === 'sync' && changes.mdMode) {
+      currentMode = changes.mdMode.newValue || 'tldr';
     }
   });
 
@@ -238,7 +243,7 @@
     const spinner = document.createElement('div');
     spinner.className = 'btl-spinner';
     const loadText = document.createElement('span');
-    loadText.textContent = '正在生成摘要...';
+    loadText.textContent = currentMode === 'original' ? '正在保存原文...' : '正在生成摘要...';
     wrap.appendChild(spinner);
     wrap.appendChild(loadText);
     body.appendChild(wrap);

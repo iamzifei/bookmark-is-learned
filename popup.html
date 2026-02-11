@@ -71,6 +71,15 @@
           </select>
         </div>
 
+        <div class="form-group">
+          <label for="mdMode">保存模式</label>
+          <select id="mdMode">
+            <option value="tldr">TLDR 摘要模式</option>
+            <option value="original">原文模式</option>
+          </select>
+          <div class="hint" id="mdModeHint">TLDR 模式生成 AI 摘要，原文模式保存完整原文</div>
+        </div>
+
         <button id="saveBtn" class="save-btn">保存设置</button>
         <div id="status" class="status"></div>
 

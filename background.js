@@ -29,10 +29,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Download markdown only if user has enabled it
         var prefs = await chrome.storage.sync.get({ autoDownloadMd: true });
         if (prefs.autoDownloadMd) {
-          saveMarkdownFile(message.tweetData, result.tldr, result.articleContent, result.quotedFullContent, result.isArticle);
+          saveMarkdownFile(message.tweetData, result.tldr, result.articleContent, result.quotedFullContent, result.isArticle, result.mode);
         }
 
-        sendResponse({ success: true, tldr: result.tldr });
+        sendResponse({ success: true, tldr: result.tldr, mode: result.mode });
       })
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true;
@@ -104,9 +104,9 @@ async function saveToHistory(tweetData, tldr, isArticle) {
 
 // ── Markdown file saving (native host + chrome.downloads fallback) ───────────
 
-async function saveMarkdownFile(tweetData, tldr, articleContent, quotedFullContent, isArticle) {
+async function saveMarkdownFile(tweetData, tldr, articleContent, quotedFullContent, isArticle, mode) {
   try {
-    var markdown = buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent, isArticle);
+    var markdown = buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent, isArticle, mode);
     var fileName = buildFileName(tweetData, articleContent, isArticle);
 
     // Try writing via native messaging host (supports any folder)
@@ -191,7 +191,7 @@ async function writeViaDownloads(markdown, fileName) {
 }
 
 // Build the markdown content string from tweet data and TLDR result
-function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent, isArticle) {
+function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent, isArticle, mode) {
   var author = tweetData.author || 'unknown';
   var tweetUrl = tweetData.tweetUrl || tweetData.url || '';
   var now = new Date();
@@ -218,13 +218,15 @@ function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent
   lines.push('---');
   lines.push('');
 
-  // TLDR section
-  lines.push('## TLDR');
-  lines.push('');
-  lines.push(tldr);
-  lines.push('');
-  lines.push('---');
-  lines.push('');
+  // TLDR section (only in TLDR mode)
+  if (mode !== 'original') {
+    lines.push('## TLDR');
+    lines.push('');
+    lines.push(tldr);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
 
   // Original content section
   lines.push('## Original Content');
@@ -366,22 +368,8 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
     language: 'zh-CN',
     model: '',
     baseUrl: '',
+    mdMode: 'tldr',
   });
-
-  // Read encrypted API key from local storage
-  var localData = await chrome.storage.local.get('encryptedApiKey');
-  if (!localData.encryptedApiKey) {
-    throw new Error('请先在插件设置中填写 API Key');
-  }
-  var apiKey;
-  try {
-    apiKey = await decryptApiKey(localData.encryptedApiKey);
-  } catch (_) {
-    throw new Error('API Key 解密失败，请重新保存 API Key');
-  }
-  if (!apiKey) {
-    throw new Error('请先在插件设置中填写 API Key');
-  }
 
   // Fetch full article content if an article URL was detected
   let articleContent = null;
@@ -401,6 +389,44 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
   }
 
   const isArticle = !!(articleContent && articleContent.body);
+
+  // Original mode: skip LLM call, return content directly for markdown saving
+  if (settings.mdMode === 'original') {
+    var previewText = '原文已保存';
+    var originalText = '';
+    if (isArticle && articleContent) {
+      originalText = articleContent.body;
+    } else if (tweetData.text) {
+      originalText = tweetData.text;
+    } else if (tweetData.cardText) {
+      originalText = tweetData.cardText;
+    } else if (tweetData.fallbackText) {
+      originalText = tweetData.fallbackText;
+    }
+    if (originalText) {
+      var preview = originalText.slice(0, 200);
+      if (originalText.length > 200) preview += '...';
+      previewText += '\n\n' + preview;
+    }
+    return { tldr: previewText, articleContent, quotedFullContent, isArticle, mode: 'original' };
+  }
+
+  // TLDR mode: need API key and LLM call
+  // Read encrypted API key from local storage
+  var localData = await chrome.storage.local.get('encryptedApiKey');
+  if (!localData.encryptedApiKey) {
+    throw new Error('请先在插件设置中填写 API Key');
+  }
+  var apiKey;
+  try {
+    apiKey = await decryptApiKey(localData.encryptedApiKey);
+  } catch (_) {
+    throw new Error('API Key 解密失败，请重新保存 API Key');
+  }
+  if (!apiKey) {
+    throw new Error('请先在插件设置中填写 API Key');
+  }
+
   const hasQuotedFull = !!(quotedFullContent && quotedFullContent.body);
   const prompt = buildPrompt(tweetData, articleContent, quotedFullContent, settings.language, isArticle, hasQuotedFull);
   const maxTokens = (isArticle || hasQuotedFull) ? 2000 : 1000;
@@ -424,7 +450,7 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
       throw new Error('不支持的模型: ' + settings.provider);
   }
 
-  return { tldr, articleContent, quotedFullContent, isArticle };
+  return { tldr, articleContent, quotedFullContent, isArticle, mode: 'tldr' };
 }
 
 async function resolveApiEndpoint(provider, baseUrl) {

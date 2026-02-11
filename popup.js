@@ -109,6 +109,7 @@ async function migrateAndLoadSettings() {
     provider: 'openai',
     apiKey: '',
     language: 'zh-CN',
+    mdMode: 'tldr',
     model: '',
     baseUrl: '',
     autoDownloadMd: true,
@@ -137,6 +138,7 @@ async function migrateAndLoadSettings() {
   document.getElementById('provider').value = syncData.provider;
   document.getElementById('apiKey').value = apiKeyPlain;
   document.getElementById('language').value = syncData.language;
+  document.getElementById('mdMode').value = syncData.mdMode || 'tldr';
   document.getElementById('model').value = syncData.model;
   document.getElementById('baseUrl').value = syncData.baseUrl || '';
   document.getElementById('autoDownloadMd').checked = syncData.autoDownloadMd;
@@ -305,6 +307,7 @@ async function saveSettings() {
     await chrome.storage.sync.set({
       provider: document.getElementById('provider').value,
       language: document.getElementById('language').value,
+      mdMode: document.getElementById('mdMode').value,
       model: document.getElementById('model').value.trim(),
       baseUrl: baseUrl,
       autoDownloadMd: document.getElementById('autoDownloadMd').checked,
