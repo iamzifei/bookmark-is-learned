@@ -6,7 +6,26 @@
   </head>
   <body>
     <div class="popup-container">
-      <h1 class="popup-title">&#x1F4DA; 收藏到就是学到</h1>
+      <!-- Header with title and theme toggle -->
+      <div class="popup-header">
+        <h1 class="popup-title">收藏到就是学到</h1>
+        <button id="themeToggle" class="theme-toggle" title="切换主题">
+          <!-- Sun icon for light mode -->
+          <svg class="theme-icon theme-icon-light" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="3.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <!-- Moon icon for dark mode -->
+          <svg class="theme-icon theme-icon-dark" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M13.36 10.03A6 6 0 015.97 2.64 6 6 0 1013.36 10.03z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <!-- Auto icon for system mode -->
+          <svg class="theme-icon theme-icon-auto" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="3" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M5 14h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
 
       <!-- Tab navigation -->
       <div class="tab-bar">
@@ -16,6 +35,8 @@
 
       <!-- Settings tab -->
       <div class="tab-panel active" id="tab-settings">
+
+        <!-- Basic settings (always visible) -->
         <div class="form-group">
           <label for="provider">AI 模型</label>
           <select id="provider">
@@ -27,22 +48,15 @@
         </div>
 
         <div class="form-group">
-          <label for="model">模型版本 <span class="optional">(可选)</span></label>
-          <input type="text" id="model" placeholder="留空使用默认模型" />
-          <div class="hint" id="modelHint">默认: gpt-4o-mini</div>
-        </div>
-
-        <div class="form-group">
-          <label for="baseUrl">Base URL <span class="optional">(可选)</span></label>
-          <input type="text" id="baseUrl" placeholder="例如 https://your-proxy.com/v1" />
-          <div class="hint">留空使用官方 API 地址，填写后走自定义中转地址</div>
-        </div>
-
-        <div class="form-group">
           <label for="apiKey">API Key</label>
           <div class="input-wrapper">
             <input type="password" id="apiKey" placeholder="输入你的 API Key" />
-            <button id="toggleKey" class="toggle-btn" title="显示/隐藏">&#x1F441;</button>
+            <button id="toggleKey" class="toggle-btn" title="显示/隐藏">
+              <svg class="eye-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -57,16 +71,84 @@
           </select>
         </div>
 
-        <div class="form-group checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="autoDownloadMd" checked />
-            <span>自动下载 Markdown 文件</span>
-          </label>
-          <div class="hint">收藏时自动保存 .md 文件到本地</div>
-        </div>
-
         <button id="saveBtn" class="save-btn">保存设置</button>
         <div id="status" class="status"></div>
+
+        <!-- Advanced settings (collapsible) -->
+        <details class="settings-section" id="advancedSection">
+          <summary class="section-summary">
+            <svg class="section-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            高级设置
+          </summary>
+          <div class="section-content">
+            <div class="form-group">
+              <label for="model">模型版本 <span class="optional">(可选)</span></label>
+              <input type="text" id="model" placeholder="留空使用默认模型" />
+              <div class="hint" id="modelHint">默认: gpt-4o-mini</div>
+            </div>
+
+            <div class="form-group">
+              <label for="baseUrl">Base URL <span class="optional">(可选)</span></label>
+              <input type="text" id="baseUrl" placeholder="例如 https://your-proxy.com/v1" />
+              <div class="hint">留空使用官方 API 地址，填写后走自定义中转地址</div>
+            </div>
+
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="autoDownloadMd" checked />
+                <span>自动下载 Markdown 文件</span>
+              </label>
+              <div class="hint">收藏时自动保存 .md 文件到本地</div>
+            </div>
+
+            <div class="form-group" id="savePathGroup">
+              <label>保存路径 <span class="optional">(可选)</span></label>
+              <div class="folder-picker-row">
+                <button id="pickFolderBtn" class="pick-folder-btn" type="button">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M1.5 3.5a1 1 0 011-1h3.586a1 1 0 01.707.293L8.207 4.207A1 1 0 008.914 4.5H13.5a1 1 0 011 1v7a1 1 0 01-1 1h-12a1 1 0 01-1-1v-9z"
+                          stroke="currentColor" stroke-width="1.3" fill="none"/>
+                  </svg>
+                  <span>选择文件夹</span>
+                </button>
+                <div class="folder-display">
+                  <span id="folderPath" class="folder-path">未选择</span>
+                  <button id="clearFolderBtn" class="clear-folder-btn" type="button" title="清除选择" style="display:none;">&times;</button>
+                </div>
+              </div>
+              <div class="hint" id="savePathHint">未选择文件夹，保存到下载目录 bookmark-is-learned 子文件夹</div>
+
+              <div id="nativeSetup" class="native-setup">
+                <div id="nativeSetupText" class="native-setup-text"></div>
+                <button id="nativeSetupBtn" class="native-setup-btn" type="button">下载安装脚本</button>
+                <div id="nativeSetupStep2" class="native-setup-step2" style="display:none;">
+                  <p>在终端运行:</p>
+                  <code class="install-cmd">bash ~/Downloads/install-btl-native.sh</code>
+                  <p>运行后重启浏览器，即可使用「选择文件夹」功能</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- Debug info (collapsible) -->
+        <details class="settings-section" id="debugSection">
+          <summary class="section-summary">
+            <svg class="section-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            调试信息
+          </summary>
+          <div class="section-content">
+            <div id="debugInfo" class="debug-info">
+              <div class="debug-loading">加载中...</div>
+            </div>
+            <button id="copyDebugBtn" class="copy-debug-btn" type="button">复制调试信息</button>
+          </div>
+        </details>
+
       </div>
 
       <!-- History tab -->

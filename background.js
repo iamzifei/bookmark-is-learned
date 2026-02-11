@@ -2,8 +2,13 @@
 // Handles TLDR generation: fetches full article / quoted-tweet content when
 // needed, then calls the user's chosen LLM API.
 // Also saves each successful TLDR to history and optionally downloads Markdown.
+//
+// Markdown saving strategy:
+//   1. Primary: Native messaging host (writes to any user-chosen folder)
+//   2. Fallback: chrome.downloads.download() to the Downloads folder
 
 const MAX_HISTORY = 200;
+const NATIVE_HOST_NAME = 'com.btl.file_writer';
 
 // Allowed hostnames for background tab fetching (security whitelist)
 const ALLOWED_FETCH_HOSTS = ['x.com', 'twitter.com', 'mobile.twitter.com'];
@@ -11,6 +16,7 @@ const PROVIDER_DEFAULT_ENDPOINTS = {
   openai: 'https://api.openai.com/v1/chat/completions',
   claude: 'https://api.anthropic.com/v1/messages',
   kimi: 'https://api.moonshot.cn/v1/chat/completions',
+  zhipu: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -29,7 +35,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, tldr: result.tldr });
       })
       .catch((error) => sendResponse({ success: false, error: error.message }));
-    return true; // keep sendResponse channel open for async
+    return true;
+  }
+
+  // Native folder picker — opens a macOS folder dialog via the native host.
+  // The popup fires this and does NOT wait for the response (fire-and-forget),
+  // so the popup stays interactive while the Finder dialog is open.
+  // Background saves the result to sync storage; popup listens via onChanged.
+  if (message.type === 'PICK_NATIVE_FOLDER') {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, { action: 'pick_folder' })
+      .then(async function (result) {
+        if (result && result.success) {
+          await chrome.storage.sync.set({
+            mdFolderPath: result.path,
+            mdFolderName: result.name,
+          });
+        }
+        sendResponse(result);
+      })
+      .catch(function (err) {
+        sendResponse({ success: false, error: err.message });
+      });
+    return true;
+  }
+
+  // Ping native host to check if it's installed
+  if (message.type === 'PING_NATIVE_HOST') {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, { action: 'ping' })
+      .then(function (result) { sendResponse(result); })
+      .catch(function () { sendResponse({ success: false }); });
+    return true;
   }
 });
 
@@ -56,7 +91,6 @@ async function saveToHistory(tweetData, tldr, isArticle) {
       isArticle: isArticle,
     };
 
-    // Prepend newest entry, cap at MAX_HISTORY
     history.unshift(entry);
     if (history.length > MAX_HISTORY) {
       history = history.slice(0, MAX_HISTORY);
@@ -68,110 +102,223 @@ async function saveToHistory(tweetData, tldr, isArticle) {
   }
 }
 
-// ── Markdown file download ───────────────────────────────────────────────────
+// ── Markdown file saving (native host + chrome.downloads fallback) ───────────
 
 async function saveMarkdownFile(tweetData, tldr, articleContent, quotedFullContent, isArticle) {
   try {
-    var author = tweetData.author || 'unknown';
-    var tweetUrl = tweetData.tweetUrl || tweetData.url || '';
-    var now = new Date();
-    var dateStr = now.getFullYear() + '-'
-      + String(now.getMonth() + 1).padStart(2, '0') + '-'
-      + String(now.getDate()).padStart(2, '0') + ' '
-      + String(now.getHours()).padStart(2, '0') + ':'
-      + String(now.getMinutes()).padStart(2, '0');
+    var markdown = buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent, isArticle);
+    var fileName = buildFileName(tweetData, articleContent, isArticle);
 
-    // ── Build Markdown ────────────────────────────────────────────────────
+    // Try writing via native messaging host (supports any folder)
+    var written = await writeViaNativeHost(markdown, fileName);
 
-    var lines = [];
-
-    // Title
-    var title = isArticle && articleContent && articleContent.title
-      ? articleContent.title
-      : author;
-    lines.push('# ' + title);
-    lines.push('');
-
-    // Metadata block
-    lines.push('> **Author**: ' + author);
-    lines.push('> **Source**: ' + tweetUrl);
-    lines.push('> **Date**: ' + dateStr);
-    lines.push('');
-    lines.push('---');
-    lines.push('');
-
-    // TLDR section (at the top as requested)
-    lines.push('## TLDR');
-    lines.push('');
-    lines.push(tldr);
-    lines.push('');
-    lines.push('---');
-    lines.push('');
-
-    // Original content section
-    lines.push('## Original Content');
-    lines.push('');
-
-    // Main tweet / article text
-    if (isArticle && articleContent) {
-      if (articleContent.title) {
-        lines.push('### ' + articleContent.title);
-        lines.push('');
-      }
-      lines.push(articleContent.body);
-    } else if (tweetData.text) {
-      lines.push(tweetData.text);
-    } else if (tweetData.cardText) {
-      lines.push(tweetData.cardText);
-    } else if (tweetData.fallbackText) {
-      lines.push(tweetData.fallbackText);
+    if (!written) {
+      // Fallback: save via chrome.downloads to the Downloads folder
+      await writeViaDownloads(markdown, fileName);
     }
-    lines.push('');
-
-    // Quoted content (if present)
-    var quotedBody = quotedFullContent && quotedFullContent.body
-      ? quotedFullContent.body
-      : (tweetData.quotedText || '');
-    if (quotedBody) {
-      var quotedBy = tweetData.quotedAuthor || 'unknown';
-      lines.push('### Quoted Content (by ' + quotedBy + ')');
-      lines.push('');
-      lines.push(quotedBody);
-      lines.push('');
-    }
-
-    // Card text (if separate from main text)
-    if (!isArticle && tweetData.text && tweetData.cardText) {
-      lines.push('### Attached Card');
-      lines.push('');
-      lines.push(tweetData.cardText);
-      lines.push('');
-    }
-
-    var markdown = lines.join('\n');
-
-    // ── Download as .md file ──────────────────────────────────────────────
-
-    // Sanitize author name for filename (remove line breaks, special chars)
-    var safeAuthor = author.replace(/[\n\r]/g, ' ').replace(/[\\/:*?"<>|]/g, '_').trim().slice(0, 40);
-    var timeStamp = now.getFullYear()
-      + String(now.getMonth() + 1).padStart(2, '0')
-      + String(now.getDate()).padStart(2, '0')
-      + '-' + String(now.getHours()).padStart(2, '0')
-      + String(now.getMinutes()).padStart(2, '0')
-      + String(now.getSeconds()).padStart(2, '0');
-    var filename = 'bookmark-is-learned/' + safeAuthor + '-' + timeStamp + '.md';
-
-    var dataUrl = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(markdown);
-    await chrome.downloads.download({
-      url: dataUrl,
-      filename: filename,
-      saveAs: false,
-      conflictAction: 'uniquify',
+  } catch (err) {
+    console.log('[background] saveMarkdownFile error:', err.message);
+    // Log save failure for debug info display in popup
+    chrome.storage.local.set({
+      lastSave: { timestamp: Date.now(), success: false, error: err.message },
     });
-  } catch (_) {
-    // Markdown download failure is non-critical — silently ignore
   }
+}
+
+// Write markdown via the native messaging host.
+// Reads the user's chosen folder path from sync storage and sends the
+// file content to the Python host for writing.
+// Returns true on success, false if the host is not installed or write fails.
+async function writeViaNativeHost(markdown, fileName) {
+  try {
+    var syncData = await chrome.storage.sync.get({ mdFolderPath: '' });
+    if (!syncData.mdFolderPath) return false;
+
+    var fullPath = syncData.mdFolderPath + '/' + fileName;
+    var response = await chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, {
+      action: 'write_file',
+      path: fullPath,
+      content: markdown,
+    });
+    if (response && response.success) {
+      chrome.storage.local.set({
+        lastSave: { timestamp: Date.now(), success: true, path: response.path, method: 'native' },
+      });
+      return true;
+    }
+    console.log('[background] Native host write returned error:', response && response.error);
+    return false;
+  } catch (err) {
+    console.log('[background] Native host write failed:', err.message);
+    return false;
+  }
+}
+
+// Fallback: save via chrome.downloads to the Downloads/bookmark-is-learned/ subfolder.
+// Tracks actual download completion before logging success.
+async function writeViaDownloads(markdown, fileName) {
+  var fullPath = 'bookmark-is-learned/' + fileName;
+  var dataUrl = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(markdown);
+  var downloadId = await chrome.downloads.download({
+    url: dataUrl,
+    filename: fullPath,
+    saveAs: false,
+    conflictAction: 'uniquify',
+  });
+
+  // Wait for actual download completion before logging result
+  return new Promise(function (resolve) {
+    function onChanged(delta) {
+      if (delta.id !== downloadId) return;
+      if (delta.state && delta.state.current === 'complete') {
+        chrome.downloads.onChanged.removeListener(onChanged);
+        chrome.storage.local.set({
+          lastSave: { timestamp: Date.now(), success: true, path: 'Downloads/' + fullPath, method: 'downloads' },
+        });
+        resolve();
+      } else if (delta.state && delta.state.current === 'interrupted') {
+        chrome.downloads.onChanged.removeListener(onChanged);
+        chrome.storage.local.set({
+          lastSave: { timestamp: Date.now(), success: false, error: 'download interrupted', method: 'downloads' },
+        });
+        resolve();
+      }
+    }
+    chrome.downloads.onChanged.addListener(onChanged);
+    // Safety timeout: resolve after 30s even if no state change fires
+    setTimeout(function () { chrome.downloads.onChanged.removeListener(onChanged); resolve(); }, 30000);
+  });
+}
+
+// Build the markdown content string from tweet data and TLDR result
+function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent, isArticle) {
+  var author = tweetData.author || 'unknown';
+  var tweetUrl = tweetData.tweetUrl || tweetData.url || '';
+  var now = new Date();
+  var dateStr = now.getFullYear() + '-'
+    + String(now.getMonth() + 1).padStart(2, '0') + '-'
+    + String(now.getDate()).padStart(2, '0') + ' '
+    + String(now.getHours()).padStart(2, '0') + ':'
+    + String(now.getMinutes()).padStart(2, '0');
+
+  var lines = [];
+
+  // Title
+  var title = isArticle && articleContent && articleContent.title
+    ? articleContent.title
+    : author;
+  lines.push('# ' + title);
+  lines.push('');
+
+  // Metadata block
+  lines.push('> **Author**: ' + author);
+  lines.push('> **Source**: ' + tweetUrl);
+  lines.push('> **Date**: ' + dateStr);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // TLDR section
+  lines.push('## TLDR');
+  lines.push('');
+  lines.push(tldr);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // Original content section
+  lines.push('## Original Content');
+  lines.push('');
+
+  if (isArticle && articleContent) {
+    if (articleContent.title) {
+      lines.push('### ' + articleContent.title);
+      lines.push('');
+    }
+    lines.push(articleContent.body);
+  } else if (tweetData.text) {
+    lines.push(tweetData.text);
+  } else if (tweetData.cardText) {
+    lines.push(tweetData.cardText);
+  } else if (tweetData.fallbackText) {
+    lines.push(tweetData.fallbackText);
+  }
+  lines.push('');
+
+  // Quoted content (if present)
+  var quotedBody = quotedFullContent && quotedFullContent.body
+    ? quotedFullContent.body
+    : (tweetData.quotedText || '');
+  if (quotedBody) {
+    var quotedBy = tweetData.quotedAuthor || 'unknown';
+    lines.push('### Quoted Content (by ' + quotedBy + ')');
+    lines.push('');
+    lines.push(quotedBody);
+    lines.push('');
+  }
+
+  // Card text (if separate from main text)
+  if (!isArticle && tweetData.text && tweetData.cardText) {
+    lines.push('### Attached Card');
+    lines.push('');
+    lines.push(tweetData.cardText);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// Build a sanitized filename like "handle-title-20260211-143022.md"
+// Format: x-account handle, title (article title or tweet excerpt), timestamp
+function buildFileName(tweetData, articleContent, isArticle) {
+  // Extract X handle from tweet URL (e.g., "https://x.com/elonmusk/status/123")
+  var handle = 'unknown';
+  var tweetUrl = tweetData.tweetUrl || tweetData.url || '';
+  try {
+    var pathname = new URL(tweetUrl).pathname;
+    var firstSegment = pathname.split('/')[1];
+    if (firstSegment) handle = firstSegment;
+  } catch (_) { /* use default */ }
+
+  // Derive a short title from article title or tweet text
+  var title = '';
+  if (isArticle && articleContent && articleContent.title) {
+    title = articleContent.title;
+  } else {
+    title = tweetData.text || tweetData.cardText || tweetData.fallbackText || '';
+  }
+
+  // Sanitize handle and title for use in filenames:
+  // - Remove control characters (U+0000–U+001F, U+007F) and null bytes
+  // - Replace filesystem-unsafe characters
+  // - Strip leading dots to prevent hidden files
+  var safeHandle = handle
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/^\.+/, '')
+    .trim().slice(0, 30);
+  var safeTitle = title
+    .replace(/[\n\r]+/g, ' ')
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/^\.+/, '')
+    .trim()
+    .slice(0, 50);
+  // Remove trailing incomplete words if title was truncated
+  if (title.length > 50) {
+    var lastSpace = safeTitle.lastIndexOf(' ');
+    if (lastSpace > 20) safeTitle = safeTitle.slice(0, lastSpace);
+  }
+  if (!safeTitle) safeTitle = 'untitled';
+
+  var now = new Date();
+  var timeStamp = now.getFullYear()
+    + String(now.getMonth() + 1).padStart(2, '0')
+    + String(now.getDate()).padStart(2, '0')
+    + '-' + String(now.getHours()).padStart(2, '0')
+    + String(now.getMinutes()).padStart(2, '0')
+    + String(now.getSeconds()).padStart(2, '0');
+  return safeHandle + '-' + safeTitle + '-' + timeStamp + '.md';
 }
 
 // ── API Key encryption (AES-GCM via Web Crypto API) ─────────────────────────
@@ -271,13 +418,12 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
       tldr = await callKimi(apiKey, endpoint, settings.model || 'moonshot-v1-8k', prompt, maxTokens);
       break;
     case 'zhipu':
-      tldr = await callZhipu(apiKey, settings.model || 'glm-4-flash', prompt, maxTokens);
+      tldr = await callZhipu(apiKey, endpoint, settings.model || 'glm-4-flash', prompt, maxTokens);
       break;
     default:
       throw new Error('不支持的模型: ' + settings.provider);
   }
 
-  // Return full context so the caller can save markdown and history
   return { tldr, articleContent, quotedFullContent, isArticle };
 }
 
@@ -294,12 +440,14 @@ async function resolveApiEndpoint(provider, baseUrl) {
   await ensureBaseUrlPermission(parsed.origin);
 
   var path = parsed.pathname.replace(/\/+$/, '');
-  if (/\/v1\/(chat\/completions|messages)$/i.test(path)) {
+  // If the path already ends with the full API route, use it as-is
+  if (/\/v\d+\/(chat\/completions|messages)$/i.test(path)) {
     return parsed.origin + path;
   }
 
   var suffix = provider === 'claude' ? '/messages' : '/chat/completions';
-  if (/\/v1$/i.test(path)) {
+  // If the path ends with a version segment (e.g. /v1, /v4), append the suffix
+  if (/\/v\d+$/i.test(path)) {
     return parsed.origin + path + suffix;
   }
   if (!path || path === '/') {
@@ -327,19 +475,14 @@ function ensureBaseUrlPermission(origin) {
         return;
       }
 
-      // Service worker context has no reliable user gesture for permission prompt.
-      // The permission is requested in popup save flow.
       reject(new Error('Base URL 缺少域名权限，请在插件设置中重新保存并授权'));
     });
   });
 }
 
 // ── Page content fetching (articles & quoted tweets) ────────────────────────────
-// Opens the URL in a background tab, waits for the SPA to render,
-// injects extraction script, then closes the tab.
 
 async function fetchPageContent(pageUrl) {
-  // Only open tabs for trusted domains (x.com / twitter.com)
   if (!isAllowedFetchUrl(pageUrl)) return null;
 
   let tabId = null;
@@ -348,7 +491,7 @@ async function fetchPageContent(pageUrl) {
     tabId = tab.id;
 
     await waitForTabLoad(tabId, 15000);
-    await sleep(4000); // extra wait for SPA hydration
+    await sleep(4000);
 
     const results = await chrome.scripting.executeScript({
       target: { tabId },
@@ -367,33 +510,39 @@ async function fetchPageContent(pageUrl) {
 
 function waitForTabLoad(tabId, timeoutMs) {
   return new Promise((resolve) => {
+    function cleanup() {
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      chrome.tabs.onRemoved.removeListener(onRemoved);
+    }
     const onUpdated = (id, info) => {
       if (id === tabId && info.status === 'complete') {
-        chrome.tabs.onUpdated.removeListener(onUpdated);
+        cleanup();
+        resolve();
+      }
+    };
+    // Clean up if the tab is closed/crashed before load completes
+    const onRemoved = (id) => {
+      if (id === tabId) {
+        cleanup();
         resolve();
       }
     };
     chrome.tabs.onUpdated.addListener(onUpdated);
-    setTimeout(() => { chrome.tabs.onUpdated.removeListener(onUpdated); resolve(); }, timeoutMs);
+    chrome.tabs.onRemoved.addListener(onRemoved);
+    setTimeout(() => { cleanup(); resolve(); }, timeoutMs);
   });
 }
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-/**
- * Injected into the background tab. Waits for content to render, then
- * extracts the page's main text. Works for both X Articles and tweet threads.
- * Must be fully self-contained (serialised into the target page).
- */
 function extractPageContent() {
   return new Promise((resolve) => {
     var attempts = 0;
-    var maxAttempts = 16; // 16 x 500 ms = 8 s
+    var maxAttempts = 16;
 
     var timer = setInterval(function () {
       attempts++;
 
-      // ── Strategy 1: Article-specific containers ──────────────────────────
       var articleSelectors = [
         '[data-testid="noteBody"]',
         '[data-testid="richTextContainer"]',
@@ -413,10 +562,8 @@ function extractPageContent() {
         }
       }
 
-      // ── Strategy 2: Tweet text blocks (thread or single tweet) ───────────
       var blocks = document.querySelectorAll('[data-testid="tweetText"]');
       if (blocks.length >= 1) {
-        // Take up to first 10 blocks — covers the main tweet plus thread
         var textParts = [];
         var limit = Math.min(blocks.length, 10);
         for (var j = 0; j < limit; j++) {
@@ -430,7 +577,6 @@ function extractPageContent() {
         }
       }
 
-      // ── Strategy 3: Fallback to <main> ───────────────────────────────────
       if (attempts >= maxAttempts) {
         clearInterval(timer);
         var main = document.querySelector('main');
@@ -460,27 +606,20 @@ function buildPrompt(tweetData, articleContent, quotedFullContent, language, isA
   };
   var langName = langMap[language] || language;
 
-  // ── Assemble user content ─────────────────────────────────────────────────
-
   var userContent = '';
 
   if (isArticle) {
-    // Full article mode
     userContent = 'Article: "' + articleContent.title + '"\n'
       + 'By ' + tweetData.author + '\n\n'
       + articleContent.body;
   } else if (tweetData.text) {
-    // Regular tweet
     userContent = 'Tweet by ' + tweetData.author + ':\n' + tweetData.text;
   } else if (tweetData.cardText) {
-    // Card-only tweet (e.g. article card without extra text)
     userContent = 'Post by ' + tweetData.author + ':\n' + tweetData.cardText;
   } else if (tweetData.fallbackText) {
-    // Last resort: raw visible text from the tweet element
     userContent = 'Content by ' + tweetData.author + ':\n' + tweetData.fallbackText;
   }
 
-  // Append quoted content — prefer full fetched version, fall back to inline preview
   if (hasQuotedFull) {
     var quotedBy = tweetData.quotedAuthor || 'another user';
     userContent += '\n\n--- Quoted / referenced post (by ' + quotedBy + ') ---\n' + quotedFullContent.body;
@@ -489,14 +628,10 @@ function buildPrompt(tweetData, articleContent, quotedFullContent, language, isA
     userContent += '\n\nQuoted tweet (by ' + qAuthor + '):\n' + tweetData.quotedText;
   }
 
-  // Append card text if not already used as main content
   if (!isArticle && tweetData.text && tweetData.cardText) {
     userContent += '\n\nAttached card:\n' + tweetData.cardText;
   }
 
-  // ── System prompt ─────────────────────────────────────────────────────────
-
-  // Shared fact-check instruction appended to every prompt
   var factCheckBlock = '\n\n'
     + '--- FACT CHECK (MANDATORY) ---\n'
     + 'At the very end, add a fact-check section with this exact format:\n\n'
@@ -575,6 +710,9 @@ async function callOpenAI(apiKey, endpoint, model, prompt, maxTokens) {
     throw new Error((err.error && err.error.message) || 'OpenAI API error: ' + res.status);
   }
   var data = await res.json();
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    throw new Error('OpenAI API returned unexpected response format');
+  }
   return data.choices[0].message.content;
 }
 
@@ -585,6 +723,7 @@ async function callClaude(apiKey, endpoint, model, prompt, maxTokens) {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
       model: model,
@@ -598,6 +737,9 @@ async function callClaude(apiKey, endpoint, model, prompt, maxTokens) {
     throw new Error((err.error && err.error.message) || 'Claude API error: ' + res.status);
   }
   var data = await res.json();
+  if (!data.content || !data.content[0]) {
+    throw new Error('Claude API returned unexpected response format');
+  }
   return data.content[0].text;
 }
 
@@ -620,11 +762,14 @@ async function callKimi(apiKey, endpoint, model, prompt, maxTokens) {
     throw new Error((err.error && err.error.message) || 'Kimi API error: ' + res.status);
   }
   var data = await res.json();
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    throw new Error('Kimi API returned unexpected response format');
+  }
   return data.choices[0].message.content;
 }
 
-async function callZhipu(apiKey, model, prompt, maxTokens) {
-  var res = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+async function callZhipu(apiKey, endpoint, model, prompt, maxTokens) {
+  var res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
     body: JSON.stringify({
@@ -642,5 +787,8 @@ async function callZhipu(apiKey, model, prompt, maxTokens) {
     throw new Error((err.error && err.error.message) || '智谱 API error: ' + res.status);
   }
   var data = await res.json();
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    throw new Error('智谱 API returned unexpected response format');
+  }
   return data.choices[0].message.content;
 }

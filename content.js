@@ -9,12 +9,41 @@
   let cardContainer = null;
   let activeCards = []; // { id, element, timerId }
   let cardSeq = 0;
+  let currentTheme = 'auto'; // 'auto' | 'light' | 'dark'
 
-  // ── Bookmark click detection ────────────────────────────────────────────────
+  // ── Theme management ──────────────────────────────────────────────────────
+
+  // Load initial theme preference from storage
+  chrome.storage.sync.get({ theme: 'auto' }, function (data) {
+    currentTheme = data.theme || 'auto';
+    applyThemeToContainer();
+  });
+
+  // Listen for theme changes from the popup settings
+  chrome.storage.onChanged.addListener(function (changes, area) {
+    if (area === 'sync' && changes.theme) {
+      currentTheme = changes.theme.newValue || 'auto';
+      applyThemeToContainer();
+    }
+  });
+
+  // Apply theme class to the card container element
+  function applyThemeToContainer() {
+    if (!cardContainer) return;
+    cardContainer.classList.remove('btl-auto', 'btl-light', 'btl-dark');
+    cardContainer.classList.add('btl-' + currentTheme);
+  }
+
+  // ── Bookmark click detection ──────────────────────────────────────────────
 
   document.addEventListener('click', (event) => {
     const bookmarkBtn = findAncestorByTestId(event.target, 'bookmark');
     if (!bookmarkBtn) return;
+
+    // Only fire when adding a bookmark, not when removing one.
+    // X uses "removeBookmark" for the un-bookmark button.
+    const removeBtn = findAncestorByTestId(event.target, 'removeBookmark');
+    if (removeBtn) return;
 
     const article = bookmarkBtn.closest('article[data-testid="tweet"]');
     if (!article) return;
@@ -24,7 +53,7 @@
     processBookmark(article, cardId);
   }, true);
 
-  // ── Main async flow (per card) ──────────────────────────────────────────────
+  // ── Main async flow (per card) ────────────────────────────────────────────
 
   async function processBookmark(article, cardId) {
     try {
@@ -59,7 +88,7 @@
     }
   }
 
-  // ── DOM helpers ─────────────────────────────────────────────────────────────
+  // ── DOM helpers ───────────────────────────────────────────────────────────
 
   function findAncestorByTestId(el, testId) {
     while (el && el !== document.body) {
@@ -69,7 +98,7 @@
     return null;
   }
 
-  // ── Show-more expansion ─────────────────────────────────────────────────────
+  // ── Show-more expansion ───────────────────────────────────────────────────
 
   async function expandShowMore(article) {
     const links = article.querySelectorAll('[data-testid="tweet-text-show-more-link"]');
@@ -86,7 +115,7 @@
     });
   }
 
-  // ── Content extraction ──────────────────────────────────────────────────────
+  // ── Content extraction ────────────────────────────────────────────────────
 
   function extractTweetContent(article) {
     const tweetTextEl = article.querySelector('[data-testid="tweetText"]');
@@ -131,7 +160,7 @@
     };
   }
 
-  // ── URL detection ───────────────────────────────────────────────────────────
+  // ── URL detection ─────────────────────────────────────────────────────────
 
   function detectArticleUrl(article) {
     const links = article.querySelectorAll('a[href]');
@@ -160,12 +189,12 @@
     return null;
   }
 
-  // ── Card container & stacking ───────────────────────────────────────────────
+  // ── Card container & stacking ─────────────────────────────────────────────
 
   function ensureContainer() {
     if (!cardContainer || !cardContainer.parentNode) {
       cardContainer = document.createElement('div');
-      cardContainer.className = 'btl-card-container';
+      cardContainer.className = 'btl-card-container btl-' + currentTheme;
       document.body.appendChild(cardContainer);
     }
     return cardContainer;
@@ -187,7 +216,13 @@
     header.className = 'btl-card-header';
     const title = document.createElement('span');
     title.className = 'btl-card-title';
-    title.textContent = '\u{1F4DA} 收藏到就是学到';
+    // Use extension icon instead of emoji
+    const iconImg = document.createElement('img');
+    iconImg.className = 'btl-card-title-icon';
+    iconImg.src = chrome.runtime.getURL('icons/icon48.png');
+    iconImg.alt = '';
+    title.appendChild(iconImg);
+    title.appendChild(document.createTextNode('收藏到就是学到'));
     const closeBtn = document.createElement('button');
     closeBtn.className = 'btl-card-close';
     closeBtn.textContent = '\u00D7';
@@ -260,7 +295,7 @@
     activeCards.splice(idx, 1);
   }
 
-  // ── Formatted TLDR rendering ────────────────────────────────────────────────
+  // ── Formatted TLDR rendering ──────────────────────────────────────────────
 
   function renderFormattedTLDR(container, text) {
     const lines = text.split('\n');

@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "scripting",
-    "downloads"
+    "downloads",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://x.com/*",
@@ -45,5 +46,11 @@
   "optional_host_permissions": [
     "http://*/*",
     "https://*/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/icon48.png"],
+      "matches": ["https://x.com/*", "https://twitter.com/*"]
+    }
   ]
 }

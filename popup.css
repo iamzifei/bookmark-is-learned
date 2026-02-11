@@ -1,3 +1,58 @@
+/* ── CSS custom properties for theming ────────────────────────────────────── */
+
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f9f9;
+  --text-primary: #0f1419;
+  --text-secondary: #536471;
+  --text-hint: #a0a8b0;
+  --border-color: #eff3f4;
+  --input-border: #cfd9de;
+  --input-bg: #ffffff;
+  --accent: #1d9bf0;
+  --accent-hover: #1a8cd8;
+  --accent-active: #1577b8;
+  --success: #00ba7c;
+  --error: #f4212e;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --tldr-bg: #f7f9f9;
+  --toggle-opacity: 0.5;
+}
+
+/* Dark theme variables */
+[data-theme="dark"] {
+  --bg-primary: #16181c;
+  --bg-secondary: #1e2024;
+  --text-primary: #e7e9ea;
+  --text-secondary: #71767b;
+  --text-hint: #6e7681;
+  --border-color: #2f3336;
+  --input-border: #3e4144;
+  --input-bg: #1e2024;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --tldr-bg: #1e2024;
+  --toggle-opacity: 0.6;
+}
+
+/* System dark mode detection (used when data-theme="auto") */
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    --bg-primary: #16181c;
+    --bg-secondary: #1e2024;
+    --text-primary: #e7e9ea;
+    --text-secondary: #71767b;
+    --text-hint: #6e7681;
+    --border-color: #2f3336;
+    --input-border: #3e4144;
+    --input-bg: #1e2024;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+    --tldr-bg: #1e2024;
+    --toggle-opacity: 0.6;
+  }
+}
+
+/* ── Base reset ──────────────────────────────────────────────────────────── */
+
 * {
   margin: 0;
   padding: 0;
@@ -7,25 +62,70 @@
 body {
   width: 380px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #fff;
-  color: #0f1419;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background 0.2s, color 0.2s;
 }
 
 .popup-container {
   padding: 16px 18px;
 }
 
-.popup-title {
-  font-size: 17px;
-  font-weight: 800;
+/* ── Header with title and theme toggle ──────────────────────────────────── */
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 12px;
 }
 
-/* ── Tab bar ──────────────────────────────────────────────────────────────── */
+.popup-title {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+/* ── Theme toggle button ─────────────────────────────────────────────────── */
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: 1.5px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.theme-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+/* Only show the icon matching the current theme state */
+.theme-icon { display: none; }
+
+/* Default state: auto (system) mode */
+.theme-icon-auto { display: block; }
+
+/* When body has data-theme="light", show sun icon */
+[data-theme="light"] .theme-icon-auto { display: none; }
+[data-theme="light"] .theme-icon-light { display: block; }
+
+/* When body has data-theme="dark", show moon icon */
+[data-theme="dark"] .theme-icon-auto { display: none; }
+[data-theme="dark"] .theme-icon-dark { display: block; }
+
+/* ── Tab bar ─────────────────────────────────────────────────────────────── */
 
 .tab-bar {
   display: flex;
-  border-bottom: 1px solid #eff3f4;
+  border-bottom: 1px solid var(--border-color);
   margin-bottom: 14px;
 }
 
@@ -36,22 +136,22 @@ body {
   padding: 8px 0;
   font-size: 13px;
   font-weight: 600;
-  color: #536471;
+  color: var(--text-secondary);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: color 0.15s, border-color 0.15s;
 }
 
 .tab-btn:hover {
-  color: #0f1419;
+  color: var(--text-primary);
 }
 
 .tab-btn.active {
-  color: #1d9bf0;
-  border-bottom-color: #1d9bf0;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
-/* ── Tab panels ───────────────────────────────────────────────────────────── */
+/* ── Tab panels ──────────────────────────────────────────────────────────── */
 
 .tab-panel {
   display: none;
@@ -67,7 +167,7 @@ body {
   margin-bottom: 14px;
 }
 
-/* ── Checkbox toggle ──────────────────────────────────────────────────────── */
+/* ── Checkbox toggle ─────────────────────────────────────────────────────── */
 
 .checkbox-group {
   margin-bottom: 16px;
@@ -80,13 +180,13 @@ body {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  color: #0f1419;
+  color: var(--text-primary);
 }
 
 .checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
-  accent-color: #1d9bf0;
+  accent-color: var(--accent);
   cursor: pointer;
 }
 
@@ -95,12 +195,12 @@ body {
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 5px;
-  color: #536471;
+  color: var(--text-secondary);
 }
 
 .optional {
   font-weight: 400;
-  color: #a0a8b0;
+  color: var(--text-hint);
 }
 
 select,
@@ -108,18 +208,31 @@ input[type='text'],
 input[type='password'] {
   width: 100%;
   padding: 8px 10px;
-  border: 1.5px solid #cfd9de;
+  border: 1.5px solid var(--input-border);
   border-radius: 8px;
   font-size: 13px;
   outline: none;
-  transition: border-color 0.2s;
-  background: #fff;
-  color: #0f1419;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--input-bg);
+  color: var(--text-primary);
 }
 
 select:focus,
 input:focus {
-  border-color: #1d9bf0;
+  border-color: var(--accent);
+}
+
+/* Fix select dropdown arrow color in dark mode */
+select {
+  color-scheme: light;
+}
+[data-theme="dark"] select {
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] select {
+    color-scheme: dark;
+  }
 }
 
 .input-wrapper {
@@ -138,10 +251,12 @@ input:focus {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 14px;
   padding: 2px 4px;
-  opacity: 0.5;
+  opacity: var(--toggle-opacity);
   transition: opacity 0.15s;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
 }
 
 .toggle-btn:hover {
@@ -150,16 +265,252 @@ input:focus {
 
 .hint {
   font-size: 11px;
-  color: #a0a8b0;
+  color: var(--text-hint);
   margin-top: 3px;
 }
 
-/* ── Save button ──────────────────────────────────────────────────────────── */
+/* ── Folder picker ───────────────────────────────────────────────────────── */
+
+.folder-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pick-folder-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--input-border);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pick-folder-btn:hover {
+  border-color: var(--accent);
+}
+
+.pick-folder-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pick-folder-btn:disabled:hover {
+  border-color: var(--input-border);
+}
+
+.pick-folder-btn svg {
+  flex-shrink: 0;
+}
+
+.folder-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.folder-path {
+  font-size: 12px;
+  color: var(--text-hint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-path.active {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.clear-folder-btn {
+  background: none;
+  border: none;
+  color: var(--text-hint);
+  cursor: pointer;
+  font-size: 15px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.clear-folder-btn:hover {
+  color: var(--error);
+}
+
+/* ── Collapsible sections (details/summary) ──────────────────────────────── */
+
+.settings-section {
+  margin-top: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.section-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+  list-style: none;
+}
+
+/* Hide the default disclosure triangle */
+.section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.section-summary::marker {
+  content: '';
+}
+
+.section-summary:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+/* Rotate arrow when open */
+.section-arrow {
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.settings-section[open] > .section-summary .section-arrow {
+  transform: rotate(90deg);
+}
+
+.section-content {
+  padding: 2px 14px 14px;
+}
+
+/* ── Native host setup hint ──────────────────────────────────────────────── */
+
+.native-setup {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--tldr-bg);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.native-setup-text {
+  color: var(--text-hint);
+  margin-bottom: 4px;
+}
+
+.native-setup-btn {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 4px 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.native-setup-btn:hover {
+  background: var(--accent-hover);
+}
+
+.native-setup-step2 {
+  margin-top: 6px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.native-setup-step2 p {
+  margin: 2px 0;
+}
+
+.install-cmd,
+.ext-id {
+  display: inline-block;
+  background: var(--bg-primary);
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 10px;
+  color: var(--text-primary);
+  word-break: break-all;
+  user-select: all;
+}
+
+.install-cmd {
+  display: block;
+  padding: 6px 8px;
+  margin: 4px 0;
+  white-space: pre-wrap;
+}
+
+/* ── Debug info panel ────────────────────────────────────────────────────── */
+
+.debug-info {
+  padding: 8px 10px;
+  background: var(--tldr-bg);
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.debug-loading {
+  color: var(--text-hint);
+}
+
+.copy-debug-btn {
+  width: 100%;
+  padding: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1.5px solid var(--input-border);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.copy-debug-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.copy-debug-btn.copied {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+/* ── Save button ─────────────────────────────────────────────────────────── */
 
 .save-btn {
   width: 100%;
   padding: 9px;
-  background: #1d9bf0;
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 9999px;
@@ -170,14 +521,14 @@ input:focus {
 }
 
 .save-btn:hover {
-  background: #1a8cd8;
+  background: var(--accent-hover);
 }
 
 .save-btn:active {
-  background: #1577b8;
+  background: var(--accent-active);
 }
 
-/* ── Status message ───────────────────────────────────────────────────────── */
+/* ── Status message ──────────────────────────────────────────────────────── */
 
 .status {
   text-align: center;
@@ -187,14 +538,14 @@ input:focus {
 }
 
 .status.success {
-  color: #00ba7c;
+  color: var(--success);
 }
 
 .status.error {
-  color: #f4212e;
+  color: var(--error);
 }
 
-/* ── History tab ──────────────────────────────────────────────────────────── */
+/* ── History tab ─────────────────────────────────────────────────────────── */
 
 .history-list {
   max-height: 420px;
@@ -205,22 +556,22 @@ input:focus {
   width: 4px;
 }
 .history-list::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--scrollbar-thumb);
   border-radius: 2px;
 }
 
 .history-empty {
   text-align: center;
-  color: #a0a8b0;
+  color: var(--text-hint);
   font-size: 13px;
   padding: 30px 0;
 }
 
-/* ── History item ─────────────────────────────────────────────────────────── */
+/* ── History item ────────────────────────────────────────────────────────── */
 
 .history-item {
   padding: 10px 0;
-  border-bottom: 1px solid #eff3f4;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .history-item:last-child {
@@ -237,7 +588,7 @@ input:focus {
 .history-author {
   font-size: 12px;
   font-weight: 700;
-  color: #0f1419;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -246,13 +597,13 @@ input:focus {
 
 .history-time {
   font-size: 11px;
-  color: #a0a8b0;
+  color: var(--text-hint);
   flex-shrink: 0;
 }
 
 .history-preview {
   font-size: 12px;
-  color: #536471;
+  color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 6px;
   display: -webkit-box;
@@ -261,7 +612,7 @@ input:focus {
   overflow: hidden;
 }
 
-/* ── TLDR content (expandable) ────────────────────────────────────────────── */
+/* ── TLDR content (expandable) ───────────────────────────────────────────── */
 
 .history-tldr {
   overflow: hidden;
@@ -276,16 +627,16 @@ input:focus {
 .history-tldr-text {
   font-size: 12px;
   line-height: 1.6;
-  color: #0f1419;
+  color: var(--text-primary);
   padding: 8px 10px;
-  background: #f7f9f9;
+  background: var(--tldr-bg);
   border-radius: 8px;
   margin-bottom: 6px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-/* ── History actions row ──────────────────────────────────────────────────── */
+/* ── History actions row ─────────────────────────────────────────────────── */
 
 .history-actions {
   display: flex;
@@ -295,7 +646,7 @@ input:focus {
 
 .history-link {
   font-size: 11px;
-  color: #1d9bf0;
+  color: var(--accent);
   text-decoration: none;
   font-weight: 500;
 }
@@ -306,7 +657,7 @@ input:focus {
 
 .history-toggle {
   font-size: 11px;
-  color: #1d9bf0;
+  color: var(--accent);
   background: none;
   border: none;
   cursor: pointer;
@@ -318,15 +669,15 @@ input:focus {
   text-decoration: underline;
 }
 
-/* ── Clear history button ─────────────────────────────────────────────────── */
+/* ── Clear history button ────────────────────────────────────────────────── */
 
 .clear-history-btn {
   width: 100%;
   padding: 8px;
   margin-top: 10px;
   background: none;
-  color: #f4212e;
-  border: 1.5px solid #f4212e;
+  color: var(--error);
+  border: 1.5px solid var(--error);
   border-radius: 9999px;
   font-size: 12px;
   font-weight: 600;
@@ -335,6 +686,11 @@ input:focus {
 }
 
 .clear-history-btn:hover {
-  background: #f4212e;
+  background: var(--error);
+  color: #fff;
+}
+
+.clear-history-btn.confirming {
+  background: var(--error);
   color: #fff;
 }
