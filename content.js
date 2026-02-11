@@ -159,10 +159,56 @@
       }
     }
 
+    // Extract engagement metrics (replies, retweets, likes, views)
+    const metrics = extractEngagementMetrics(article);
+
     return {
       text, author, quotedText, quotedAuthor, cardText, fallbackText,
-      tweetUrl, url: window.location.href,
+      tweetUrl, url: window.location.href, metrics,
     };
+  }
+
+  // ── Engagement metrics extraction ──────────────────────────────────────────
+
+  function extractEngagementMetrics(article) {
+    var metrics = { replies: '0', retweets: '0', likes: '0', views: '0' };
+    var group = article.querySelector('[role="group"]');
+    if (!group) return metrics;
+
+    // Each action button exposes its count in the aria-label attribute,
+    // e.g. "123 replies. Reply", "5 reposts. Repost", "10 likes. Like".
+    // If the count is zero X omits the number (just "Reply", "Like", etc.).
+    var testIds = { reply: 'replies', retweet: 'retweets', like: 'likes' };
+    for (var tid in testIds) {
+      var btn = group.querySelector('[data-testid="' + tid + '"]');
+      if (btn) {
+        var label = btn.getAttribute('aria-label') || '';
+        var m = label.match(/([\d,]+)/);
+        if (m) metrics[testIds[tid]] = m[1].replace(/,/g, '');
+      }
+    }
+
+    // Views count: X puts it in an analytics link or a standalone element
+    // outside the main action buttons. Try analytics link first, then
+    // look for any aria-label mentioning "view" near the action bar.
+    var viewLink = article.querySelector('a[href*="/analytics"]');
+    if (viewLink) {
+      var viewLabel = viewLink.getAttribute('aria-label') || '';
+      var vm = viewLabel.match(/([\d,]+)/);
+      if (vm) metrics.views = vm[1].replace(/,/g, '');
+    } else {
+      // Fallback: some X layouts show views as a separate span in the group
+      var allLabels = group.querySelectorAll('[aria-label]');
+      for (var i = 0; i < allLabels.length; i++) {
+        var al = allLabels[i].getAttribute('aria-label') || '';
+        if (/views?/i.test(al)) {
+          var vvm = al.match(/([\d,]+)/);
+          if (vvm) { metrics.views = vvm[1].replace(/,/g, ''); break; }
+        }
+      }
+    }
+
+    return metrics;
   }
 
   // ── URL detection ─────────────────────────────────────────────────────────

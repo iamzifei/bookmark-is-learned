@@ -214,6 +214,16 @@ function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent
   lines.push('> **Author**: ' + author);
   lines.push('> **Source**: ' + tweetUrl);
   lines.push('> **Date**: ' + dateStr);
+
+  // Engagement metrics (if available)
+  var metrics = tweetData.metrics;
+  if (metrics) {
+    lines.push('> **Replies**: ' + (metrics.replies || '0')
+      + ' · **Retweets**: ' + (metrics.retweets || '0')
+      + ' · **Likes**: ' + (metrics.likes || '0')
+      + ' · **Views**: ' + (metrics.views || '0'));
+  }
+
   lines.push('');
   lines.push('---');
   lines.push('');
@@ -228,43 +238,45 @@ function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent
     lines.push('');
   }
 
-  // Original content section
-  lines.push('## Original Content');
-  lines.push('');
+  // Original content section (only in original mode)
+  if (mode === 'original') {
+    lines.push('## Original Content');
+    lines.push('');
 
-  if (isArticle && articleContent) {
-    if (articleContent.title) {
-      lines.push('### ' + articleContent.title);
+    if (isArticle && articleContent) {
+      if (articleContent.title) {
+        lines.push('### ' + articleContent.title);
+        lines.push('');
+      }
+      lines.push(articleContent.body);
+    } else if (tweetData.text) {
+      lines.push(tweetData.text);
+    } else if (tweetData.cardText) {
+      lines.push(tweetData.cardText);
+    } else if (tweetData.fallbackText) {
+      lines.push(tweetData.fallbackText);
+    }
+    lines.push('');
+
+    // Quoted content (if present)
+    var quotedBody = quotedFullContent && quotedFullContent.body
+      ? quotedFullContent.body
+      : (tweetData.quotedText || '');
+    if (quotedBody) {
+      var quotedBy = tweetData.quotedAuthor || 'unknown';
+      lines.push('### Quoted Content (by ' + quotedBy + ')');
+      lines.push('');
+      lines.push(quotedBody);
       lines.push('');
     }
-    lines.push(articleContent.body);
-  } else if (tweetData.text) {
-    lines.push(tweetData.text);
-  } else if (tweetData.cardText) {
-    lines.push(tweetData.cardText);
-  } else if (tweetData.fallbackText) {
-    lines.push(tweetData.fallbackText);
-  }
-  lines.push('');
 
-  // Quoted content (if present)
-  var quotedBody = quotedFullContent && quotedFullContent.body
-    ? quotedFullContent.body
-    : (tweetData.quotedText || '');
-  if (quotedBody) {
-    var quotedBy = tweetData.quotedAuthor || 'unknown';
-    lines.push('### Quoted Content (by ' + quotedBy + ')');
-    lines.push('');
-    lines.push(quotedBody);
-    lines.push('');
-  }
-
-  // Card text (if separate from main text)
-  if (!isArticle && tweetData.text && tweetData.cardText) {
-    lines.push('### Attached Card');
-    lines.push('');
-    lines.push(tweetData.cardText);
-    lines.push('');
+    // Card text (if separate from main text)
+    if (!isArticle && tweetData.text && tweetData.cardText) {
+      lines.push('### Attached Card');
+      lines.push('');
+      lines.push(tweetData.cardText);
+      lines.push('');
+    }
   }
 
   return lines.join('\n');
