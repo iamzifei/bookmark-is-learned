@@ -228,15 +228,13 @@ function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent
   lines.push('---');
   lines.push('');
 
-  // TLDR section (only in TLDR mode)
-  if (mode !== 'original') {
-    lines.push('## TLDR');
-    lines.push('');
-    lines.push(tldr);
-    lines.push('');
-    lines.push('---');
-    lines.push('');
-  }
+  // TLDR section (always included in both modes)
+  lines.push('## TLDR');
+  lines.push('');
+  lines.push(tldr);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
 
   // Original content section (only in original mode)
   if (mode === 'original') {
@@ -402,28 +400,8 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
 
   const isArticle = !!(articleContent && articleContent.body);
 
-  // Original mode: skip LLM call, return content directly for markdown saving
-  if (settings.mdMode === 'original') {
-    var previewText = '原文已保存';
-    var originalText = '';
-    if (isArticle && articleContent) {
-      originalText = articleContent.body;
-    } else if (tweetData.text) {
-      originalText = tweetData.text;
-    } else if (tweetData.cardText) {
-      originalText = tweetData.cardText;
-    } else if (tweetData.fallbackText) {
-      originalText = tweetData.fallbackText;
-    }
-    if (originalText) {
-      var preview = originalText.slice(0, 200);
-      if (originalText.length > 200) preview += '...';
-      previewText += '\n\n' + preview;
-    }
-    return { tldr: previewText, articleContent, quotedFullContent, isArticle, mode: 'original' };
-  }
-
-  // TLDR mode: need API key and LLM call
+  // Always generate TLDR via LLM — both modes show it in the popup card,
+  // and original mode also includes it in the saved markdown.
   // Read encrypted API key from local storage
   var localData = await chrome.storage.local.get('encryptedApiKey');
   if (!localData.encryptedApiKey) {
@@ -462,7 +440,7 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
       throw new Error('不支持的模型: ' + settings.provider);
   }
 
-  return { tldr, articleContent, quotedFullContent, isArticle, mode: 'tldr' };
+  return { tldr, articleContent, quotedFullContent, isArticle, mode: settings.mdMode };
 }
 
 async function resolveApiEndpoint(provider, baseUrl) {
@@ -600,12 +578,27 @@ function extractPageContent() {
         }
       }
 
-      var blocks = document.querySelectorAll('[data-testid="tweetText"]');
-      if (blocks.length >= 1) {
+      // Thread detection: only combine tweets from the same author (thread),
+      // not random timeline/recommendation tweets that appear below.
+      // Each tweet is inside an <article data-testid="tweet">. We find the
+      // author of the first tweet and only include consecutive same-author tweets.
+      var articles = document.querySelectorAll('article[data-testid="tweet"]');
+      if (articles.length >= 1) {
         var textParts = [];
-        var limit = Math.min(blocks.length, 10);
-        for (var j = 0; j < limit; j++) {
-          textParts.push(blocks[j].innerText);
+        var firstAuthor = null;
+        for (var j = 0; j < articles.length && textParts.length < 10; j++) {
+          var authorEl = articles[j].querySelector('[data-testid="User-Name"]');
+          var authorName = authorEl ? authorEl.innerText.split('\n')[0] : '';
+          if (j === 0) {
+            firstAuthor = authorName;
+          } else if (authorName !== firstAuthor) {
+            // Different author — stop collecting (end of thread)
+            break;
+          }
+          var tweetEl = articles[j].querySelector('[data-testid="tweetText"]');
+          if (tweetEl && tweetEl.innerText.trim()) {
+            textParts.push(tweetEl.innerText);
+          }
         }
         var combined = textParts.join('\n\n');
         if (combined.length > 50) {
@@ -615,14 +608,55 @@ function extractPageContent() {
         }
       }
 
+      // X Article focus mode pages: article body is rendered as plain elements
+      // with h1/h2 section headings, no special data-testid markers.
+      // Detect by looking for multiple h1 headings inside main.
+      var mainEl = document.querySelector('main');
+      if (mainEl) {
+        var h1List = mainEl.querySelectorAll('h1');
+        if (h1List.length >= 2) {
+          // Multiple h1 headings = article sections. Find their common parent.
+          var bodyContainer = h1List[0].parentElement;
+          if (bodyContainer && bodyContainer.innerText.trim().length > 200) {
+            clearInterval(timer);
+            // Remove noise elements from body (e.g. "Upgrade to Premium" banners)
+            var statusEls = bodyContainer.querySelectorAll('[role="status"]');
+            for (var s = 0; s < statusEls.length; s++) statusEls[s].remove();
+            // Look for article title: scan parent's children from the start,
+            // find the first single-line text that isn't author info (no @)
+            var titleText = '';
+            var parentEl = bodyContainer.parentElement;
+            if (parentEl) {
+              var child = parentEl.firstElementChild;
+              while (child && child !== bodyContainer) {
+                var t = child.innerText.trim();
+                if (t && t.length > 5 && t.length < 200
+                    && t.indexOf('@') === -1 && t.indexOf('\n') === -1) {
+                  titleText = t;
+                  break;
+                }
+                child = child.nextElementSibling;
+              }
+            }
+            if (!titleText) titleText = document.title;
+            resolve({
+              title: titleText,
+              body: bodyContainer.innerText.trim().slice(0, 15000),
+            });
+            return;
+          }
+        }
+      }
+
       if (attempts >= maxAttempts) {
         clearInterval(timer);
-        var main = document.querySelector('main');
-        if (main && main.innerText.length > 200) {
+        // Prefer primaryColumn (center column only) over main (which includes sidebar)
+        var contentArea = document.querySelector('[data-testid="primaryColumn"]') || mainEl;
+        if (contentArea && contentArea.innerText.length > 200) {
           var heading = document.querySelector('h1');
           resolve({
             title: heading ? heading.innerText : document.title,
-            body: main.innerText.slice(0, 15000),
+            body: contentArea.innerText.slice(0, 15000),
           });
         } else {
           resolve(null);

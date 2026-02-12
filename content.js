@@ -141,10 +141,25 @@
 
     let fallbackText = '';
     if (!text && !cardText) {
-      const clone = article.cloneNode(true);
-      const bar = clone.querySelector('[role="group"]');
-      if (bar) bar.remove();
-      fallbackText = clone.innerText.trim();
+      // For X Articles: prefer heading-based extraction to avoid metadata noise
+      // (author info, engagement metrics, bio that duplicate the markdown header).
+      // Article body is the parent of the first h1 section heading.
+      const h1s = article.querySelectorAll('h1');
+      if (h1s.length >= 2) {
+        const bodyContainer = h1s[0].parentElement;
+        if (bodyContainer && bodyContainer.innerText.trim().length > 200) {
+          const clone = bodyContainer.cloneNode(true);
+          // Remove "Upgrade to Premium" banners and similar noise
+          clone.querySelectorAll('[role="status"]').forEach((s) => s.remove());
+          fallbackText = clone.innerText.trim();
+        }
+      }
+      if (!fallbackText) {
+        const clone = article.cloneNode(true);
+        // Remove ALL engagement metric groups
+        clone.querySelectorAll('[role="group"]').forEach((g) => g.remove());
+        fallbackText = clone.innerText.trim();
+      }
     }
 
     // Extract the tweet's own permalink (timestamp link, not inside quoted tweet)
@@ -214,17 +229,37 @@
   // ── URL detection ─────────────────────────────────────────────────────────
 
   function detectArticleUrl(article) {
+    // Only detect X Articles by their distinctive URL pattern (/i/article/ or /articles/).
+    // Previously a broad data-testid*="article" CSS selector caused false positives,
+    // matching non-article elements and sending regular tweet URLs to fetchPageContent,
+    // which then grabbed unrelated tweets from the page as "article content".
     const links = article.querySelectorAll('a[href]');
     for (const link of links) {
       const href = link.href || link.getAttribute('href') || '';
       if (/\/(articles?)\//i.test(href)) {
-        return href.startsWith('/') ? 'https://x.com' + href : href;
+        // Strip media/photo/video suffixes — X Article image links look like
+        // /user/article/123/media/456 but the article page is /user/article/123
+        const cleanHref = href.replace(/\/(media|photo|video)\/.*$/, '');
+        return cleanHref.startsWith('/') ? 'https://x.com' + cleanHref : cleanHref;
       }
     }
-    const ac = article.querySelector('[data-testid*="article" i], [data-testid*="Article"]');
-    if (ac) {
-      const cl = ac.closest('a[href]') || ac.querySelector('a[href]');
-      if (cl) { const h = cl.href || cl.getAttribute('href') || ''; if (h) return h.startsWith('/') ? 'https://x.com' + h : h; }
+    // Fallback: look for X Article-specific data-testid values (exact matches only).
+    // These are the selectors used by extractPageContent to find article bodies.
+    const articleTestIds = [
+      '[data-testid="noteBody"]',
+      '[data-testid="richTextContainer"]',
+      '[data-testid="articleBody"]',
+      '[data-testid="article-content"]',
+    ];
+    for (const sel of articleTestIds) {
+      const el = article.querySelector(sel);
+      if (el) {
+        const cl = el.closest('a[href]') || el.querySelector('a[href]');
+        if (cl) {
+          const h = cl.href || cl.getAttribute('href') || '';
+          if (h) return h.startsWith('/') ? 'https://x.com' + h : h;
+        }
+      }
     }
     return null;
   }
@@ -289,7 +324,7 @@
     const spinner = document.createElement('div');
     spinner.className = 'btl-spinner';
     const loadText = document.createElement('span');
-    loadText.textContent = currentMode === 'original' ? '正在保存原文...' : '正在生成摘要...';
+    loadText.textContent = '正在生成摘要...';
     wrap.appendChild(spinner);
     wrap.appendChild(loadText);
     body.appendChild(wrap);
