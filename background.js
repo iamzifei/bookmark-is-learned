@@ -158,7 +158,10 @@ async function writeViaNativeHost(markdown, fileName) {
 // Tracks actual download completion before logging success.
 async function writeViaDownloads(markdown, fileName) {
   var fullPath = 'bookmark-is-learned/' + fileName;
-  var dataUrl = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(markdown);
+  // Use text/plain instead of text/markdown — Windows Chrome doesn't recognize
+  // text/markdown in the system MIME registry, which can cause the .md extension
+  // to be stripped from the downloaded file.
+  var dataUrl = 'data:text/plain;charset=utf-8,' + encodeURIComponent(markdown);
   var downloadId = await chrome.downloads.download({
     url: dataUrl,
     filename: fullPath,
