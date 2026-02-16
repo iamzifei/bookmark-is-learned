@@ -15,6 +15,7 @@
 ## 功能特点
 
 - **一键摘要** — 点击收藏按钮，自动生成结构化 TLDR 摘要（要点提炼、步骤流程、事实核查评分）
+- **AI 开关** — 一键关闭 AI 摘要和事实核查，仅保存原文 + 元数据到 Markdown（无需 API Key），默认开启
 - **原文模式** — 支持切换为原文模式，跳过 AI 摘要，直接保存完整原文到 Markdown（无需 API Key）
 - **多模型支持** — 支持 OpenAI (GPT)、Claude (Anthropic)、Kimi (月之暗面)、智谱 (GLM) 四大模型
 - **自定义 Base URL** — 支持配置中转 API 地址，可走私有网关或代理服务
@@ -42,7 +43,8 @@
 ## 使用方法
 
 1. **设置** — 点击扩展图标，选择 AI 模型，填入 API Key，选择摘要语言和保存模式
-2. **选择模式** — TLDR 摘要模式（默认）会生成 AI 摘要；原文模式直接保存完整原文
+2. **AI 开关** — 在 AI 服务配置区域右侧有一个开关，关闭后收藏时仅保存原文和元数据，不调用 AI
+3. **选择模式** — TLDR 摘要模式（默认）会生成 AI 摘要；原文模式直接保存完整原文
 3. **收藏** — 在 X (Twitter) 时间线上，点击任意推文的收藏/书签按钮
 4. **阅读摘要** — 页面右下角会弹出 TLDR 卡片，包含要点提炼和事实核查
 5. **查看历史** — 点击扩展图标，切换到「历史记录」标签页
@@ -61,8 +63,9 @@
 
 | 模式 | 说明 |
 |------|------|
-| TLDR 摘要模式 | 调用 AI 生成结构化摘要，Markdown 包含 TLDR + 原文（需要 API Key） |
-| 原文模式 | 跳过 AI 调用，Markdown 只保存完整原文（无需 API Key） |
+| AI 开启 + TLDR 摘要模式 | 调用 AI 生成结构化摘要，Markdown 包含 TLDR + 原文（需要 API Key） |
+| AI 开启 + 原文模式 | 调用 AI 生成摘要，Markdown 包含 TLDR + 完整原文（需要 API Key） |
+| AI 关闭 | 不调用 AI，Markdown 仅保存元数据 + 完整原文（无需 API Key） |
 
 ## 支持的内容类型
 
@@ -113,6 +116,31 @@ AI 生成的结构化摘要（要点、流程、事实核查评分）
 
 ---
 
+## TLDR
+
+AI 生成的结构化摘要
+
+---
+
+## Original Content
+
+原文完整内容
+
+### Quoted Content (by 被引用作者)
+
+被引用/转发的完整内容（如有）
+```
+
+**AI 关闭模式：**
+```markdown
+# 作者名 或 文章标题
+
+> **Author**: 作者名
+> **Source**: https://x.com/user/status/123456
+> **Date**: 2025-01-15 14:30
+
+---
+
 ## Original Content
 
 原文完整内容
@@ -129,11 +157,11 @@ AI 生成的结构化摘要（要点、流程、事实核查评分）
      ↓
 后台脚本接收 → 如有长文/引用帖，后台标签页抓取完整内容
      ↓
-┌─ TLDR 模式 ──────────────────────────────────┐
+┌─ AI 开启 ────────────────────────────────────┐
 │  调用 LLM API → 生成结构化 TLDR 摘要         │
 └──────────────────────────────────────────────┘
-┌─ 原文模式 ───────────────────────────────────┐
-│  跳过 API 调用，直接使用原文                  │
+┌─ AI 关闭 ────────────────────────────────────┐
+│  跳过 API 调用，仅保存原文 + 元数据          │
 └──────────────────────────────────────────────┘
      ↓
 ┌─────────────────────────────────────────┐
@@ -212,6 +240,7 @@ MIT License
 ## Features
 
 - **One-Click Summaries** — Bookmark a post and instantly get a structured TLDR (key points, step-by-step processes, fact-check scoring)
+- **AI Toggle** — Disable AI summarization and fact-checking with one click — saves only original text + metadata to Markdown (no API Key needed), enabled by default
 - **Original Text Mode** — Switch to Original mode to save the full original text directly to Markdown without AI summarization (no API Key required)
 - **Multi-Model Support** — Choose between OpenAI (GPT), Claude (Anthropic), Kimi (Moonshot), and Zhipu (GLM)
 - **Custom Base URL** — Route requests through your API proxy or private gateway
@@ -239,7 +268,8 @@ MIT License
 ## Usage
 
 1. **Configure** — Click the extension icon, select your AI model, enter your API key, choose the summary language and save mode
-2. **Choose Mode** — TLDR mode (default) generates AI summaries; Original mode saves full original text
+2. **AI Toggle** — Use the toggle switch in the AI config section to enable/disable AI; when off, bookmarks save only original text and metadata
+3. **Choose Mode** — TLDR mode (default) generates AI summaries; Original mode saves full original text
 3. **Bookmark** — On the X (Twitter) timeline, click the bookmark button on any post
 4. **Read** — A TLDR card appears at the bottom-right corner with key insights and a fact-check score
 5. **Browse History** — Click the extension icon and switch to the "History" tab
@@ -258,8 +288,9 @@ By default, files are saved to `Downloads/bookmark-is-learned/`. To use a custom
 
 | Mode | Description |
 |------|-------------|
-| TLDR Mode | Calls AI to generate structured summaries; Markdown includes TLDR + original text (requires API Key) |
-| Original Mode | Skips AI call; Markdown saves full original text only (no API Key required) |
+| AI On + TLDR Mode | Calls AI to generate structured summaries; Markdown includes TLDR + original text (requires API Key) |
+| AI On + Original Mode | Calls AI to generate summaries; Markdown includes TLDR + full original text (requires API Key) |
+| AI Off | Skips AI entirely; Markdown saves only metadata + full original text (no API Key required) |
 
 ## Supported Content Types
 
@@ -310,6 +341,31 @@ Full quoted/retweeted content (if applicable)
 
 ---
 
+## TLDR
+
+AI-generated structured summary
+
+---
+
+## Original Content
+
+Full original text
+
+### Quoted Content (by Quoted Author)
+
+Full quoted/retweeted content (if applicable)
+```
+
+**AI Off Mode:**
+```markdown
+# Author Name or Article Title
+
+> **Author**: Author Name
+> **Source**: https://x.com/user/status/123456
+> **Date**: 2025-01-15 14:30
+
+---
+
 ## Original Content
 
 Full original text
@@ -326,11 +382,11 @@ User clicks bookmark → Content script detects click → Extract tweet (expand,
      ↓
 Background receives → If article/quoted post, fetch full content via background tab
      ↓
-┌─ TLDR Mode ──────────────────────────────────┐
+┌─ AI On ──────────────────────────────────────┐
 │  Call LLM API → Generate structured TLDR      │
 └───────────────────────────────────────────────┘
-┌─ Original Mode ──────────────────────────────┐
-│  Skip API call, use original text directly    │
+┌─ AI Off ─────────────────────────────────────┐
+│  Skip API call, save original text + metadata │
 └───────────────────────────────────────────────┘
      ↓
 ┌──────────────────────────────────────────────────┐
