@@ -202,6 +202,67 @@ body {
   background: var(--bg-primary);
 }
 
+/* ── AI toggle switch (iOS-style) ────────────────────────────────────────── */
+
+.ai-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.ai-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.ai-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--input-border);
+  border-radius: 20px;
+  transition: background 0.2s;
+}
+
+.ai-toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.ai-toggle input:checked + .ai-toggle-slider {
+  background: var(--accent);
+}
+
+.ai-toggle input:checked + .ai-toggle-slider::before {
+  transform: translateX(16px);
+}
+
+/* Dim AI config fields when AI is disabled */
+.settings-card.ai-disabled > *:not(.settings-card-header) {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 /* ── 2-column row for compact dropdowns ──────────────────────────────────── */
 
 .form-row-2col {

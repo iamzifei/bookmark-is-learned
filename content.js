@@ -11,13 +11,15 @@
   let cardSeq = 0;
   let currentTheme = 'auto'; // 'auto' | 'light' | 'dark'
   let currentMode = 'tldr'; // 'tldr' | 'original'
+  let aiEnabled = true;
 
   // ── Theme & mode management ───────────────────────────────────────────────
 
   // Load initial theme and mode preferences from storage
-  chrome.storage.sync.get({ theme: 'auto', mdMode: 'tldr' }, function (data) {
+  chrome.storage.sync.get({ theme: 'auto', mdMode: 'tldr', aiEnabled: true }, function (data) {
     currentTheme = data.theme || 'auto';
     currentMode = data.mdMode || 'tldr';
+    aiEnabled = data.aiEnabled !== false;
     applyThemeToContainer();
   });
 
@@ -29,6 +31,9 @@
     }
     if (area === 'sync' && changes.mdMode) {
       currentMode = changes.mdMode.newValue || 'tldr';
+    }
+    if (area === 'sync' && changes.aiEnabled) {
+      aiEnabled = changes.aiEnabled.newValue !== false;
     }
   });
 
@@ -82,7 +87,11 @@
             return;
           }
           if (response?.success) {
-            updateCard(cardId, response.tldr, false, tweetData.tweetUrl);
+            if (response.mode === 'raw') {
+              updateCard(cardId, '已保存原文到 Markdown', false, tweetData.tweetUrl);
+            } else {
+              updateCard(cardId, response.tldr, false, tweetData.tweetUrl);
+            }
           } else {
             updateCard(cardId, response?.error || '生成摘要失败', true);
           }
@@ -324,7 +333,7 @@
     const spinner = document.createElement('div');
     spinner.className = 'btl-spinner';
     const loadText = document.createElement('span');
-    loadText.textContent = '正在生成摘要...';
+    loadText.textContent = aiEnabled ? '正在生成摘要...' : '正在保存原文...';
     wrap.appendChild(spinner);
     wrap.appendChild(loadText);
     body.appendChild(wrap);

@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
   document.getElementById('themeToggle').addEventListener('click', cycleTheme);
   document.getElementById('autoDownloadMd').addEventListener('change', toggleSavePathVisibility);
+  document.getElementById('aiEnabled').addEventListener('change', toggleAiFields);
   document.getElementById('pickFolderBtn').addEventListener('click', pickFolder);
   document.getElementById('clearFolderBtn').addEventListener('click', clearFolder);
   document.getElementById('nativeSetupBtn').addEventListener('click', downloadInstallScript);
@@ -116,6 +117,7 @@ async function migrateAndLoadSettings() {
     autoDownloadMd: true,
     mdFolderPath: '',  // folder path saved by background.js via native picker
     theme: 'auto',
+    aiEnabled: true,
   });
 
   // If a plaintext key exists in sync, migrate it
@@ -143,8 +145,10 @@ async function migrateAndLoadSettings() {
   document.getElementById('model').value = syncData.model;
   document.getElementById('baseUrl').value = syncData.baseUrl || '';
   document.getElementById('autoDownloadMd').checked = syncData.autoDownloadMd;
+  document.getElementById('aiEnabled').checked = syncData.aiEnabled !== false;
   updateModelHint(syncData.provider);
   toggleSavePathVisibility();
+  toggleAiFields();
 
   // Load folder display from stored path
   if (syncData.mdFolderPath) {
@@ -190,6 +194,22 @@ var nativeHostAvailable = false;
 function toggleSavePathVisibility() {
   var checked = document.getElementById('autoDownloadMd').checked;
   document.getElementById('savePathGroup').style.display = checked ? 'block' : 'none';
+}
+
+// Toggle AI config fields and save mode visibility based on AI toggle state.
+// Persists immediately so the setting takes effect without clicking "保存设置".
+function toggleAiFields() {
+  var enabled = document.getElementById('aiEnabled').checked;
+  var card = document.getElementById('aiConfigCard');
+  var mdModeGroup = document.getElementById('mdModeGroup');
+  if (enabled) {
+    card.classList.remove('ai-disabled');
+    if (mdModeGroup) mdModeGroup.style.display = 'block';
+  } else {
+    card.classList.add('ai-disabled');
+    if (mdModeGroup) mdModeGroup.style.display = 'none';
+  }
+  chrome.storage.sync.set({ aiEnabled: enabled });
 }
 
 // Update the hint text below the folder picker based on current state
@@ -286,7 +306,8 @@ async function saveSettings() {
     const baseUrlInput = document.getElementById('baseUrl').value.trim();
 
     var mdMode = document.getElementById('mdMode').value;
-    if (!apiKeyPlain && mdMode !== 'original') {
+    var aiEnabled = document.getElementById('aiEnabled').checked;
+    if (!apiKeyPlain && mdMode !== 'original' && aiEnabled) {
       showStatus('\u8BF7\u586B\u5199 API Key', 'error');
       return;
     }
@@ -315,6 +336,7 @@ async function saveSettings() {
       model: document.getElementById('model').value.trim(),
       baseUrl: baseUrl,
       autoDownloadMd: document.getElementById('autoDownloadMd').checked,
+      aiEnabled: document.getElementById('aiEnabled').checked,
     });
 
     if (baseUrl) {
@@ -401,6 +423,7 @@ async function loadDebugInfo() {
         baseUrl: '',
         autoDownloadMd: true,
         mdFolderPath: '',
+        aiEnabled: true,
       }),
       chrome.storage.local.get({ lastSave: null }),
       chrome.runtime.sendMessage({ type: 'PING_NATIVE_HOST' }).catch(function () { return null; }),
@@ -421,6 +444,7 @@ async function loadDebugInfo() {
       lines.push('Base URL: ' + syncData.baseUrl);
     }
     lines.push('Auto Download: ' + (syncData.autoDownloadMd ? 'on' : 'off'));
+    lines.push('AI Enabled: ' + (syncData.aiEnabled !== false ? 'on' : 'off'));
     lines.push('Save Path: ' + (syncData.mdFolderPath || '(downloads folder)'));
 
     if (localData.lastSave) {
@@ -717,27 +741,8 @@ async function loadHistory() {
     preview.className = 'history-preview';
     preview.textContent = entry.tweetPreview || '';
 
-    var tldrWrap = document.createElement('div');
-    tldrWrap.className = 'history-tldr collapsed';
-
-    var tldrContent = document.createElement('div');
-    tldrContent.className = 'history-tldr-text';
-    tldrContent.textContent = entry.tldr || '';
-    tldrWrap.appendChild(tldrContent);
-
-    var toggleBtn = document.createElement('button');
-    toggleBtn.className = 'history-toggle';
-    toggleBtn.textContent = '展开摘要';
-    toggleBtn.addEventListener('click', function () {
-      var isCollapsed = tldrWrap.classList.contains('collapsed');
-      if (isCollapsed) {
-        tldrWrap.classList.remove('collapsed');
-        toggleBtn.textContent = '收起摘要';
-      } else {
-        tldrWrap.classList.add('collapsed');
-        toggleBtn.textContent = '展开摘要';
-      }
-    });
+    item.appendChild(header);
+    item.appendChild(preview);
 
     var actions = document.createElement('div');
     actions.className = 'history-actions';
@@ -752,11 +757,34 @@ async function loadHistory() {
       actions.appendChild(link);
     }
 
-    actions.appendChild(toggleBtn);
+    // Only show TLDR expand/collapse when there is TLDR content
+    if (entry.tldr) {
+      var tldrWrap = document.createElement('div');
+      tldrWrap.className = 'history-tldr collapsed';
 
-    item.appendChild(header);
-    item.appendChild(preview);
-    item.appendChild(tldrWrap);
+      var tldrContent = document.createElement('div');
+      tldrContent.className = 'history-tldr-text';
+      tldrContent.textContent = entry.tldr;
+      tldrWrap.appendChild(tldrContent);
+
+      var toggleBtn = document.createElement('button');
+      toggleBtn.className = 'history-toggle';
+      toggleBtn.textContent = '展开摘要';
+      toggleBtn.addEventListener('click', function () {
+        var isCollapsed = tldrWrap.classList.contains('collapsed');
+        if (isCollapsed) {
+          tldrWrap.classList.remove('collapsed');
+          toggleBtn.textContent = '收起摘要';
+        } else {
+          tldrWrap.classList.add('collapsed');
+          toggleBtn.textContent = '展开摘要';
+        }
+      });
+
+      item.appendChild(tldrWrap);
+      actions.appendChild(toggleBtn);
+    }
+
     item.appendChild(actions);
     fragment.appendChild(item);
   });

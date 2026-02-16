@@ -37,8 +37,14 @@
       <div class="tab-panel active" id="tab-settings">
 
         <!-- Section 1: AI Service Configuration -->
-        <div class="settings-card">
-          <div class="settings-card-header">AI 服务配置</div>
+        <div class="settings-card" id="aiConfigCard">
+          <div class="settings-card-header ai-header-row">
+            <span>AI 服务配置</span>
+            <label class="ai-toggle" title="开启/关闭 AI 摘要和事实核查">
+              <input type="checkbox" id="aiEnabled" checked />
+              <span class="ai-toggle-slider"></span>
+            </label>
+          </div>
 
           <!-- 2-column row: provider + language -->
           <div class="form-row-2col">
@@ -93,7 +99,7 @@
         <div class="settings-card">
           <div class="settings-card-header">文件保存</div>
 
-          <div class="form-group">
+          <div class="form-group" id="mdModeGroup">
             <label for="mdMode">保存模式</label>
             <select id="mdMode">
               <option value="tldr">TLDR 摘要模式</option>

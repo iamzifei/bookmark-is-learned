@@ -263,16 +263,18 @@ function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent
   lines.push('---');
   lines.push('');
 
-  // TLDR section (always included in both modes)
-  lines.push('## TLDR');
-  lines.push('');
-  lines.push(tldr);
-  lines.push('');
-  lines.push('---');
-  lines.push('');
+  // TLDR section (skip in raw mode when AI is disabled)
+  if (mode !== 'raw') {
+    lines.push('## TLDR');
+    lines.push('');
+    lines.push(tldr);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
 
-  // Original content section (only in original mode)
-  if (mode === 'original') {
+  // Original content section (included in original and raw modes)
+  if (mode === 'original' || mode === 'raw') {
     lines.push('## Original Content');
     lines.push('');
 
@@ -416,6 +418,7 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
     model: '',
     baseUrl: '',
     mdMode: 'tldr',
+    aiEnabled: true,
   });
 
   // Fetch full article content if an article URL was detected
@@ -437,7 +440,12 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
 
   const isArticle = !!(articleContent && articleContent.body);
 
-  // Always generate TLDR via LLM — both modes show it in the popup card,
+  // If AI is disabled, skip LLM call — return raw content for markdown-only saving
+  if (!settings.aiEnabled) {
+    return { tldr: '', articleContent, quotedFullContent, isArticle, mode: 'raw' };
+  }
+
+  // Generate TLDR via LLM — both modes show it in the popup card,
   // and original mode also includes it in the saved markdown.
   // Read encrypted API key from local storage
   var localData = await chrome.storage.local.get('encryptedApiKey');
