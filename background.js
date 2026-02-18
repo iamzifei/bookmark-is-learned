@@ -279,6 +279,19 @@ function stripArticleMetadataPrefix(body, title, author) {
   return lines.slice(i).join('\n').trim();
 }
 
+// Escape special characters in URLs to prevent markdown link injection.
+// Parentheses inside a URL would break the [text](url) syntax, and
+// square brackets in the display text would break the link label.
+function escapeMarkdownLinkUrl(url) {
+  return url.replace(/[()]/g, function (c) {
+    return '%' + c.charCodeAt(0).toString(16).toUpperCase();
+  });
+}
+
+function escapeMarkdownLinkText(text) {
+  return text.replace(/[[\]]/g, '\\$&');
+}
+
 // Build the markdown content string from tweet data and TLDR result
 function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent, isArticle, mode) {
   var author = tweetData.author || 'unknown';
@@ -374,7 +387,7 @@ function buildMarkdownContent(tweetData, tldr, articleContent, quotedFullContent
       lines.push('');
       for (var i = 0; i < tweetData.referencedUrls.length; i++) {
         var linkUrl = tweetData.referencedUrls[i];
-        lines.push('- [' + linkUrl + '](' + linkUrl + ')');
+        lines.push('- [' + escapeMarkdownLinkText(linkUrl) + '](' + escapeMarkdownLinkUrl(linkUrl) + ')');
       }
       lines.push('');
     }
@@ -536,19 +549,19 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
   let tldr;
   switch (settings.provider) {
     case 'openai':
-      tldr = await callOpenAI(apiKey, endpoint, settings.model || 'gpt-4o-mini', prompt, maxTokens);
+      tldr = await callOpenAICompatible(apiKey, endpoint, settings.model || 'gpt-4o-mini', prompt, maxTokens, 'OpenAI');
       break;
     case 'claude':
       tldr = await callClaude(apiKey, endpoint, settings.model || 'claude-sonnet-4-20250514', prompt, maxTokens);
       break;
     case 'kimi':
-      tldr = await callKimi(apiKey, endpoint, settings.model || 'moonshot-v1-8k', prompt, maxTokens);
+      tldr = await callOpenAICompatible(apiKey, endpoint, settings.model || 'moonshot-v1-8k', prompt, maxTokens, 'Kimi');
       break;
     case 'zhipu':
-      tldr = await callZhipu(apiKey, endpoint, settings.model || 'glm-4-flash', prompt, maxTokens);
+      tldr = await callOpenAICompatible(apiKey, endpoint, settings.model || 'glm-4-flash', prompt, maxTokens, '智谱');
       break;
     case 'local-claude':
-      tldr = await callLocalClaude(prompt, maxTokens);
+      tldr = await callLocalClaude(prompt);
       break;
     default:
       throw new Error('不支持的模型: ' + settings.provider);
@@ -902,7 +915,9 @@ function buildPrompt(tweetData, articleContent, quotedFullContent, language, isA
 
 // ── LLM API calls ───────────────────────────────────────────────────────────────
 
-async function callOpenAI(apiKey, endpoint, model, prompt, maxTokens) {
+// Shared caller for OpenAI-compatible APIs (OpenAI, Kimi, Zhipu all use the
+// same request/response format: messages array, choices[0].message.content).
+async function callOpenAICompatible(apiKey, endpoint, model, prompt, maxTokens, providerLabel) {
   var res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
@@ -918,15 +933,17 @@ async function callOpenAI(apiKey, endpoint, model, prompt, maxTokens) {
   });
   if (!res.ok) {
     var err = await res.json().catch(function () { return {}; });
-    throw new Error((err.error && err.error.message) || 'OpenAI API error: ' + res.status);
+    throw new Error((err.error && err.error.message) || providerLabel + ' API error: ' + res.status);
   }
   var data = await res.json();
   if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-    throw new Error('OpenAI API returned unexpected response format');
+    throw new Error(providerLabel + ' API returned unexpected response format');
   }
   return data.choices[0].message.content;
 }
 
+// Claude uses a different request/response format (Anthropic Messages API):
+// system prompt is a top-level field, response is in content[0].text.
 async function callClaude(apiKey, endpoint, model, prompt, maxTokens) {
   var res = await fetch(endpoint, {
     method: 'POST',
@@ -952,56 +969,6 @@ async function callClaude(apiKey, endpoint, model, prompt, maxTokens) {
     throw new Error('Claude API returned unexpected response format');
   }
   return data.content[0].text;
-}
-
-async function callKimi(apiKey, endpoint, model, prompt, maxTokens) {
-  var res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
-    body: JSON.stringify({
-      model: model,
-      messages: [
-        { role: 'system', content: prompt.system },
-        { role: 'user', content: prompt.user },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.3,
-    }),
-  });
-  if (!res.ok) {
-    var err = await res.json().catch(function () { return {}; });
-    throw new Error((err.error && err.error.message) || 'Kimi API error: ' + res.status);
-  }
-  var data = await res.json();
-  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-    throw new Error('Kimi API returned unexpected response format');
-  }
-  return data.choices[0].message.content;
-}
-
-async function callZhipu(apiKey, endpoint, model, prompt, maxTokens) {
-  var res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
-    body: JSON.stringify({
-      model: model,
-      messages: [
-        { role: 'system', content: prompt.system },
-        { role: 'user', content: prompt.user },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.3,
-    }),
-  });
-  if (!res.ok) {
-    var err = await res.json().catch(function () { return {}; });
-    throw new Error((err.error && err.error.message) || '智谱 API error: ' + res.status);
-  }
-  var data = await res.json();
-  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-    throw new Error('智谱 API returned unexpected response format');
-  }
-  return data.choices[0].message.content;
 }
 
 async function callLocalClaude(prompt) {

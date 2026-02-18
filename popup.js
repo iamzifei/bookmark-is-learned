@@ -375,7 +375,11 @@ async function saveSettings() {
 function normalizeBaseUrl(value) {
   try {
     var normalizedInput = value;
-    if (!/^https?:\/\//i.test(normalizedInput)) {
+    // Only add https:// if the input has no protocol at all.
+    // Reject inputs that have a non-http(s) protocol (e.g. ftp://, file://).
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(normalizedInput)) {
+      if (!/^https?:\/\//i.test(normalizedInput)) return '';
+    } else {
       normalizedInput = 'https://' + normalizedInput;
     }
     var url = new URL(normalizedInput);

@@ -17,7 +17,7 @@
 - **一键摘要** — 点击收藏按钮，自动生成结构化 TLDR 摘要（要点提炼、步骤流程、事实核查评分）
 - **AI 开关** — 一键关闭 AI 摘要和事实核查，仅保存原文 + 元数据到 Markdown（无需 API Key），默认开启
 - **原文模式** — 支持切换为原文模式，跳过 AI 摘要，直接保存完整原文到 Markdown（无需 API Key）
-- **多模型支持** — 支持 OpenAI (GPT)、Claude (Anthropic)、Kimi (月之暗面)、智谱 (GLM) 四大模型
+- **多模型支持** — 支持 OpenAI (GPT)、Claude (Anthropic)、Kimi (月之暗面)、智谱 (GLM)，以及本地 Claude CLI（无需 API Key）
 - **自定义 Base URL** — 支持配置中转 API 地址，可走私有网关或代理服务
 - **深度内容提取** — 自动展开"显示更多"折叠内容，支持 X Articles 长文、引用/转发长帖的全文抓取
 - **卡片堆叠** — 支持连续快速收藏，多张 TLDR 卡片同时显示，互不阻塞
@@ -45,10 +45,10 @@
 1. **设置** — 点击扩展图标，选择 AI 模型，填入 API Key，选择摘要语言和保存模式
 2. **AI 开关** — 在 AI 服务配置区域右侧有一个开关，关闭后收藏时仅保存原文和元数据，不调用 AI
 3. **选择模式** — TLDR 摘要模式（默认）会生成 AI 摘要；原文模式直接保存完整原文
-3. **收藏** — 在 X (Twitter) 时间线上，点击任意推文的收藏/书签按钮
-4. **阅读摘要** — 页面右下角会弹出 TLDR 卡片，包含要点提炼和事实核查
-5. **查看历史** — 点击扩展图标，切换到「历史记录」标签页
-6. **本地归档** — 每次收藏自动下载 Markdown 文件到本地
+4. **收藏** — 在 X (Twitter) 时间线上，点击任意推文的收藏/书签按钮
+5. **阅读摘要** — 页面右下角会弹出 TLDR 卡片，包含要点提炼和事实核查
+6. **查看历史** — 点击扩展图标，切换到「历史记录」标签页
+7. **本地归档** — 每次收藏自动下载 Markdown 文件到本地
 
 ### 自定义保存路径（可选）
 
@@ -191,8 +191,11 @@ AI 生成的结构化摘要
 | Claude | `claude-sonnet-4-20250514` |
 | Kimi | `moonshot-v1-8k` |
 | 智谱 | `glm-4-flash` |
+| 本地 Claude | 自动（使用本机 Claude CLI） |
 
 可在设置中自定义模型版本（如 `gpt-4o`、`claude-opus-4-20250514` 等）。
+
+本地 Claude 使用已安装的 Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)，无需 API Key，需先完成 CLI 登录认证并安装 Native Helper。
 
 可选配置 `Base URL` 以使用中转服务：
 - 填写 `https://your-proxy.com/v1` 时，将自动补全为对应模型接口
@@ -254,7 +257,7 @@ MIT License
 - **One-Click Summaries** — Bookmark a post and instantly get a structured TLDR (key points, step-by-step processes, fact-check scoring)
 - **AI Toggle** — Disable AI summarization and fact-checking with one click — saves only original text + metadata to Markdown (no API Key needed), enabled by default
 - **Original Text Mode** — Switch to Original mode to save the full original text directly to Markdown without AI summarization (no API Key required)
-- **Multi-Model Support** — Choose between OpenAI (GPT), Claude (Anthropic), Kimi (Moonshot), and Zhipu (GLM)
+- **Multi-Model Support** — Choose between OpenAI (GPT), Claude (Anthropic), Kimi (Moonshot), Zhipu (GLM), and Local Claude CLI (no API Key needed)
 - **Custom Base URL** — Route requests through your API proxy or private gateway
 - **Deep Content Extraction** — Auto-expands "Show more" truncated text, fetches full X Articles, and retrieves complete quoted/retweeted long posts
 - **Card Stacking** — Bookmark multiple posts in rapid succession — each TLDR loads independently as a stacked card
@@ -282,10 +285,10 @@ MIT License
 1. **Configure** — Click the extension icon, select your AI model, enter your API key, choose the summary language and save mode
 2. **AI Toggle** — Use the toggle switch in the AI config section to enable/disable AI; when off, bookmarks save only original text and metadata
 3. **Choose Mode** — TLDR mode (default) generates AI summaries; Original mode saves full original text
-3. **Bookmark** — On the X (Twitter) timeline, click the bookmark button on any post
-4. **Read** — A TLDR card appears at the bottom-right corner with key insights and a fact-check score
-5. **Browse History** — Click the extension icon and switch to the "History" tab
-6. **Local Archive** — Each bookmark is automatically saved as a Markdown file locally
+4. **Bookmark** — On the X (Twitter) timeline, click the bookmark button on any post
+5. **Read** — A TLDR card appears at the bottom-right corner with key insights and a fact-check score
+6. **Browse History** — Click the extension icon and switch to the "History" tab
+7. **Local Archive** — Each bookmark is automatically saved as a Markdown file locally
 
 ### Custom Save Path (Optional)
 
@@ -428,8 +431,11 @@ Background receives → If article/quoted post, fetch full content via backgroun
 | Claude | `claude-sonnet-4-20250514` |
 | Kimi | `moonshot-v1-8k` |
 | Zhipu | `glm-4-flash` |
+| Local Claude | Auto (uses local Claude CLI) |
 
 You can override the model version in settings (e.g. `gpt-4o`, `claude-opus-4-20250514`).
+
+Local Claude uses the installed Claude Code CLI (`npm install -g @anthropic-ai/claude-code`). No API Key required — just complete CLI authentication first and install the Native Helper.
 
 Optional `Base URL` for proxy routing:
 - `https://your-proxy.com/v1` will be expanded to the model-specific endpoint

@@ -1,3 +1,70 @@
+/* ── CSS custom properties for theming ─────────────────────────────────────── */
+/* Light theme (default values) — dark theme overrides below. */
+
+.btl-card-container {
+  --btl-card-bg: #ffffff;
+  --btl-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --btl-text: #0f1419;
+  --btl-text-bold: #0f1419;
+  --btl-text-secondary: #536471;
+  --btl-border: #eff3f4;
+  --btl-close-hover-bg: rgba(0, 0, 0, 0.06);
+  --btl-score-bg: rgba(0, 0, 0, 0.03);
+  --btl-heading-border: rgba(29, 155, 240, 0.15);
+  --btl-scrollbar: rgba(0, 0, 0, 0.12);
+  --btl-spinner-border: #eff3f4;
+  --btl-score-high-bg: #d4edda;
+  --btl-score-high-text: #155724;
+  --btl-score-mid-bg: #fff3cd;
+  --btl-score-mid-text: #856404;
+  --btl-score-low-bg: #f8d7da;
+  --btl-score-low-text: #721c24;
+}
+
+/* Dark theme variable overrides (manual dark mode) */
+.btl-card-container.btl-dark {
+  --btl-card-bg: #16181c;
+  --btl-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --btl-text: #e7e9ea;
+  --btl-text-bold: #ffffff;
+  --btl-text-secondary: #71767b;
+  --btl-border: #2f3336;
+  --btl-close-hover-bg: rgba(255, 255, 255, 0.08);
+  --btl-score-bg: rgba(255, 255, 255, 0.05);
+  --btl-heading-border: rgba(29, 155, 240, 0.25);
+  --btl-scrollbar: rgba(255, 255, 255, 0.12);
+  --btl-spinner-border: #2f3336;
+  --btl-score-high-bg: #1e4620;
+  --btl-score-high-text: #a3d9a5;
+  --btl-score-mid-bg: #4a3c10;
+  --btl-score-mid-text: #f0d060;
+  --btl-score-low-bg: #4a1c1e;
+  --btl-score-low-text: #f0a0a5;
+}
+
+/* Auto dark mode — same overrides, triggered by system preference */
+@media (prefers-color-scheme: dark) {
+  .btl-card-container.btl-auto {
+    --btl-card-bg: #16181c;
+    --btl-card-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    --btl-text: #e7e9ea;
+    --btl-text-bold: #ffffff;
+    --btl-text-secondary: #71767b;
+    --btl-border: #2f3336;
+    --btl-close-hover-bg: rgba(255, 255, 255, 0.08);
+    --btl-score-bg: rgba(255, 255, 255, 0.05);
+    --btl-heading-border: rgba(29, 155, 240, 0.25);
+    --btl-scrollbar: rgba(255, 255, 255, 0.12);
+    --btl-spinner-border: #2f3336;
+    --btl-score-high-bg: #1e4620;
+    --btl-score-high-text: #a3d9a5;
+    --btl-score-mid-bg: #4a3c10;
+    --btl-score-mid-text: #f0d060;
+    --btl-score-low-bg: #4a1c1e;
+    --btl-score-low-text: #f0a0a5;
+  }
+}
+
 /* ── Card container (fixed bottom-right, stacks upward) ───────────────────── */
 
 .btl-card-container {
@@ -17,9 +84,9 @@
 .btl-tldr-card {
   width: 420px;
   max-height: 55vh;
-  background: #ffffff;
+  background: var(--btl-card-bg);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--btl-card-shadow);
   overflow: hidden;
   pointer-events: auto;
   animation: btl-slide-in 0.3s ease-out;
@@ -32,13 +99,13 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-bottom: 1px solid #eff3f4;
+  border-bottom: 1px solid var(--btl-border);
 }
 
 .btl-card-title {
   font-size: 14px;
   font-weight: 700;
-  color: #0f1419;
+  color: var(--btl-text);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -55,7 +122,7 @@
   border: none;
   font-size: 20px;
   cursor: pointer;
-  color: #536471;
+  color: var(--btl-text-secondary);
   padding: 2px 6px;
   border-radius: 50%;
   line-height: 1;
@@ -63,8 +130,8 @@
 }
 
 .btl-card-close:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: #0f1419;
+  background: var(--btl-close-hover-bg);
+  color: var(--btl-text);
 }
 
 /* ── Card body ───────────────────────────────────────────────────────────── */
@@ -80,7 +147,7 @@
   width: 5px;
 }
 .btl-card-body::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--btl-scrollbar);
   border-radius: 3px;
 }
 
@@ -89,7 +156,7 @@
 .btl-original-link {
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid #eff3f4;
+  border-top: 1px solid var(--btl-border);
 }
 
 .btl-original-link a {
@@ -108,7 +175,7 @@
 .btl-tldr-content {
   font-size: 13px;
   line-height: 1.65;
-  color: #0f1419;
+  color: var(--btl-text);
 }
 
 .btl-tldr-content p {
@@ -120,7 +187,7 @@
 
 .btl-tldr-content strong {
   font-weight: 700;
-  color: #0f1419;
+  color: var(--btl-text-bold);
 }
 
 .btl-tldr-content em {
@@ -160,7 +227,7 @@
   color: #1d9bf0;
   margin: 12px 0 4px 0;
   padding-bottom: 3px;
-  border-bottom: 1px solid rgba(29, 155, 240, 0.15);
+  border-bottom: 1px solid var(--btl-heading-border);
 }
 .btl-section-heading:first-child {
   margin-top: 0;
@@ -172,7 +239,7 @@
   margin: 10px 0 0 0;
   padding: 6px 10px;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--btl-score-bg);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -184,9 +251,9 @@
   border-radius: 6px;
   font-size: 13px;
 }
-.btl-score-high { background: #d4edda; color: #155724; }
-.btl-score-mid  { background: #fff3cd; color: #856404; }
-.btl-score-low  { background: #f8d7da; color: #721c24; }
+.btl-score-high { background: var(--btl-score-high-bg); color: var(--btl-score-high-text); }
+.btl-score-mid  { background: var(--btl-score-mid-bg);  color: var(--btl-score-mid-text); }
+.btl-score-low  { background: var(--btl-score-low-bg);  color: var(--btl-score-low-text); }
 
 /* ── Error state ─────────────────────────────────────────────────────────── */
 
@@ -204,14 +271,14 @@
 }
 
 .btl-loading span {
-  color: #536471;
+  color: var(--btl-text-secondary);
   font-size: 13px;
 }
 
 .btl-spinner {
   width: 18px;
   height: 18px;
-  border: 2.5px solid #eff3f4;
+  border: 2.5px solid var(--btl-spinner-border);
   border-top-color: #1d9bf0;
   border-radius: 50%;
   animation: btl-spin 0.7s linear infinite;
@@ -234,112 +301,4 @@
 
 @keyframes btl-fade-out {
   to { opacity: 0; transform: translateY(16px) scale(0.97); }
-}
-
-/* ── Dark mode (manual override via data attribute) ──────────────────────── */
-
-.btl-card-container.btl-dark .btl-tldr-card {
-  background: #16181c;
-  color: #e7e9ea;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-}
-.btl-card-container.btl-dark .btl-card-header {
-  border-bottom-color: #2f3336;
-}
-.btl-card-container.btl-dark .btl-card-title {
-  color: #e7e9ea;
-}
-.btl-card-container.btl-dark .btl-card-close {
-  color: #71767b;
-}
-.btl-card-container.btl-dark .btl-card-close:hover {
-  color: #e7e9ea;
-  background: rgba(255, 255, 255, 0.08);
-}
-.btl-card-container.btl-dark .btl-tldr-content {
-  color: #e7e9ea;
-}
-.btl-card-container.btl-dark .btl-tldr-content strong {
-  color: #ffffff;
-}
-.btl-card-container.btl-dark .btl-tldr-content li::marker {
-  color: #1d9bf0;
-}
-.btl-card-container.btl-dark .btl-loading span {
-  color: #71767b;
-}
-.btl-card-container.btl-dark .btl-original-link {
-  border-top-color: #2f3336;
-}
-.btl-card-container.btl-dark .btl-section-heading {
-  color: #1d9bf0;
-  border-bottom-color: rgba(29, 155, 240, 0.25);
-}
-.btl-card-container.btl-dark .btl-score-line {
-  background: rgba(255, 255, 255, 0.05);
-}
-.btl-card-container.btl-dark .btl-score-high { background: #1e4620; color: #a3d9a5; }
-.btl-card-container.btl-dark .btl-score-mid  { background: #4a3c10; color: #f0d060; }
-.btl-card-container.btl-dark .btl-score-low  { background: #4a1c1e; color: #f0a0a5; }
-.btl-card-container.btl-dark .btl-card-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-}
-.btl-card-container.btl-dark .btl-spinner {
-  border-color: #2f3336;
-  border-top-color: #1d9bf0;
-}
-
-/* ── Auto dark mode (system preference fallback) ─────────────────────────── */
-
-@media (prefers-color-scheme: dark) {
-  .btl-card-container.btl-auto .btl-tldr-card {
-    background: #16181c;
-    color: #e7e9ea;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  }
-  .btl-card-container.btl-auto .btl-card-header {
-    border-bottom-color: #2f3336;
-  }
-  .btl-card-container.btl-auto .btl-card-title {
-    color: #e7e9ea;
-  }
-  .btl-card-container.btl-auto .btl-card-close {
-    color: #71767b;
-  }
-  .btl-card-container.btl-auto .btl-card-close:hover {
-    color: #e7e9ea;
-    background: rgba(255, 255, 255, 0.08);
-  }
-  .btl-card-container.btl-auto .btl-tldr-content {
-    color: #e7e9ea;
-  }
-  .btl-card-container.btl-auto .btl-tldr-content strong {
-    color: #ffffff;
-  }
-  .btl-card-container.btl-auto .btl-tldr-content li::marker {
-    color: #1d9bf0;
-  }
-  .btl-card-container.btl-auto .btl-loading span {
-    color: #71767b;
-  }
-  .btl-card-container.btl-auto .btl-original-link {
-    border-top-color: #2f3336;
-  }
-  .btl-card-container.btl-auto .btl-section-heading {
-    color: #1d9bf0;
-    border-bottom-color: rgba(29, 155, 240, 0.25);
-  }
-  .btl-card-container.btl-auto .btl-score-line {
-    background: rgba(255, 255, 255, 0.05);
-  }
-  .btl-card-container.btl-auto .btl-score-high { background: #1e4620; color: #a3d9a5; }
-  .btl-card-container.btl-auto .btl-score-mid  { background: #4a3c10; color: #f0d060; }
-  .btl-card-container.btl-auto .btl-score-low  { background: #4a1c1e; color: #f0a0a5; }
-  .btl-card-container.btl-auto .btl-card-body::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
-  }
-  .btl-card-container.btl-auto .btl-spinner {
-    border-color: #2f3336;
-    border-top-color: #1d9bf0;
-  }
 }

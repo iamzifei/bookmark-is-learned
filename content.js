@@ -414,7 +414,7 @@
       const a = document.createElement('a');
       a.href = tweetUrl;
       a.target = '_blank';
-      a.rel = 'noopener';
+      a.rel = 'noopener noreferrer';
       a.textContent = '查看原帖 \u2197';
       linkWrap.appendChild(a);
       body.appendChild(linkWrap);
