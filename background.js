@@ -14,28 +14,110 @@ const NATIVE_HOST_NAME = 'com.btl.file_writer';
 const ALLOWED_FETCH_HOSTS = ['x.com', 'twitter.com', 'mobile.twitter.com'];
 const PROVIDER_DEFAULT_ENDPOINTS = {
   openai: 'https://api.openai.com/v1/chat/completions',
+  // DeepSeek 官方推荐 Responses API：POST /responses（非 /chat/completions）
+  // 文档：https://api-docs.deepseek.com/guides/responses_api/
+  deepseek: 'https://api.deepseek.com/responses',
   claude: 'https://api.anthropic.com/v1/messages',
   kimi: 'https://api.moonshot.cn/v1/chat/completions',
   zhipu: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
 };
 
+// 启动时纠正常见 DeepSeek 误配（控制台域名 / 模型字段误填 URL）
+async function migrateDeepseekMisconfig() {
+  try {
+    var data = await chrome.storage.sync.get({ provider: 'openai', baseUrl: '', model: '' });
+    var patch = {};
+    var baseUrl = (data.baseUrl || '').trim().replace(/\/+$/, '');
+    if (
+      baseUrl === 'https://platform.deepseek.com' ||
+      baseUrl === 'http://platform.deepseek.com'
+    ) {
+      patch.baseUrl = 'https://api.deepseek.com';
+      baseUrl = patch.baseUrl;
+    }
+    var model = (data.model || '').trim();
+    if (/^https?:\/\//i.test(model)) {
+      patch.model = 'deepseek-v4-flash';
+      model = patch.model;
+    }
+    // 已指向 DeepSeek API 时，切换为独立 deepseek 提供商，避免误以为走 GPT
+    if (
+      data.provider === 'openai' &&
+      (/deepseek\.com/i.test(baseUrl) || /deepseek/i.test(model))
+    ) {
+      patch.provider = 'deepseek';
+      if (!model || /deepseek\.com/i.test(model)) {
+        patch.model = 'deepseek-v4-flash';
+      }
+      // deepseek 提供商自带官方 endpoint，可清空自定义 Base URL
+      if (!baseUrl || /deepseek\.com/i.test(baseUrl)) {
+        patch.baseUrl = '';
+      }
+    }
+    if (Object.keys(patch).length) {
+      await chrome.storage.sync.set(patch);
+    }
+  } catch (_) {
+    // 迁移失败不阻塞主流程
+  }
+}
+
+migrateDeepseekMisconfig();
+
+// 默认沉淀模式：摘要 + 原文（保存路径仍由用户在设置里选文件夹 / Native Helper 决定）
+async function migrateDefaultSaveMode() {
+  try {
+    var data = await chrome.storage.sync.get({ mdMode: 'tldr', autoDownloadMd: true });
+    var patch = {};
+    if (!data.mdMode || data.mdMode === 'tldr') {
+      patch.mdMode = 'original';
+    }
+    if (data.autoDownloadMd === false) {
+      patch.autoDownloadMd = true;
+    }
+    if (Object.keys(patch).length) {
+      await chrome.storage.sync.set(patch);
+    }
+  } catch (_) {}
+}
+
+migrateDefaultSaveMode();
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GENERATE_TLDR') {
     handleTLDRRequest(message.tweetData, message.articleUrl, message.quotedTweetUrl)
       .then(async (result) => {
-        // Save to history (non-blocking)
-        saveToHistory(message.tweetData, result.tldr, result.isArticle);
+        // MV3 service worker 可能在未 await 时被挂起，必须等历史与落盘完成
+        await saveToHistory(message.tweetData, result.tldr, result.isArticle);
 
-        // Download markdown only if user has enabled it
         var prefs = await chrome.storage.sync.get({ autoDownloadMd: true });
         if (prefs.autoDownloadMd) {
           var senderTabId = sender && sender.tab ? sender.tab.id : null;
-          saveMarkdownFile(message.tweetData, result.tldr, result.articleContent, result.quotedFullContent, result.isArticle, result.mode, senderTabId);
+          await saveMarkdownFile(
+            message.tweetData,
+            result.tldr,
+            result.articleContent,
+            result.quotedFullContent,
+            result.isArticle,
+            result.mode,
+            senderTabId
+          );
         }
 
+        await chrome.storage.local.set({ lastError: null });
         sendResponse({ success: true, tldr: result.tldr, mode: result.mode });
       })
-      .catch((error) => sendResponse({ success: false, error: error.message }));
+      .catch(async (error) => {
+        try {
+          await chrome.storage.local.set({
+            lastError: {
+              timestamp: Date.now(),
+              message: error && error.message ? error.message : String(error),
+            },
+          });
+        } catch (_) {}
+        sendResponse({ success: false, error: error.message });
+      });
     return true;
   }
 
@@ -67,7 +149,152 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(function () { sendResponse({ success: false }); });
     return true;
   }
+
+  // 设置页「测试 API」：优先使用弹窗传入的当前输入 Key（避免未点保存仍测旧 Key）
+  if (message.type === 'TEST_API') {
+    testLlmConnection(message)
+      .then(async function (result) {
+        await chrome.storage.local.set({
+          lastError: null,
+          lastSave: {
+            timestamp: Date.now(),
+            success: true,
+            path: '(api-test)',
+            method: 'test-api',
+            endpoint: result.endpoint || '',
+          },
+        });
+        sendResponse({
+          success: true,
+          preview: result.preview,
+          endpoint: result.endpoint,
+          keyHint: result.keyHint,
+        });
+      })
+      .catch(async function (error) {
+        var msg = error && error.message ? error.message : String(error);
+        await chrome.storage.local.set({
+          lastError: { timestamp: Date.now(), message: msg },
+        });
+        sendResponse({ success: false, error: msg });
+      });
+    return true;
+  }
 });
+
+function normalizeApiKey(raw) {
+  var key = String(raw || '').trim();
+  // 去掉误粘贴的引号 / Bearer 前缀 / 内部空白
+  key = key.replace(/^['"`]+|['"`]+$/g, '');
+  key = key.replace(/^Bearer\s+/i, '');
+  key = key.replace(/\s+/g, '');
+  return key;
+}
+
+function apiKeyHint(key) {
+  if (!key) return '(empty)';
+  if (key.length <= 8) return '****';
+  return key.slice(0, 3) + '****' + key.slice(-4);
+}
+
+async function testLlmConnection(message) {
+  message = message || {};
+  var settings = await chrome.storage.sync.get({
+    provider: 'openai',
+    model: '',
+    baseUrl: '',
+    aiEnabled: true,
+  });
+  // 允许测试时用弹窗里的即时配置覆盖 storage
+  if (message.provider) settings.provider = message.provider;
+  if (typeof message.model === 'string') settings.model = message.model;
+  if (typeof message.baseUrl === 'string') settings.baseUrl = message.baseUrl;
+
+  if (settings.aiEnabled === false && !message.apiKey) {
+    return { preview: 'AI 已关闭（可直接保存原文）', endpoint: '', keyHint: '' };
+  }
+  if (settings.provider === 'local-claude') {
+    var localResult = await callLocalClaude({
+      system: 'Reply with exactly: ok',
+      user: 'ping',
+    });
+    return { preview: String(localResult || '').slice(0, 80), endpoint: 'local-claude', keyHint: '' };
+  }
+
+  var apiKey = normalizeApiKey(message.apiKey || '');
+  if (!apiKey) {
+    var localData = await chrome.storage.local.get('encryptedApiKey');
+    if (!localData.encryptedApiKey) {
+      throw new Error('请先在输入框填写 API Key（测试会使用当前输入，不要求先点保存）');
+    }
+    apiKey = normalizeApiKey(await decryptApiKey(localData.encryptedApiKey));
+  }
+  if (!apiKey) throw new Error('API Key 为空，请重新粘贴');
+
+  // 若测试传入了新 Key，顺带写入本地，避免下次仍用旧 Key
+  if (message.apiKey && normalizeApiKey(message.apiKey)) {
+    try {
+      var encrypted = await encryptApiKeyForTest(apiKey);
+      if (encrypted) await chrome.storage.local.set({ encryptedApiKey: encrypted });
+    } catch (_) {}
+  }
+
+  var prompt = { system: 'Reply with exactly: ok', user: 'ping' };
+  var provider = settings.provider || 'openai';
+  var model = settings.model || '';
+  var baseUrl = settings.baseUrl || '';
+  var useDeepseek =
+    provider === 'deepseek' ||
+    /deepseek/i.test(model) ||
+    /deepseek\.com/i.test(baseUrl);
+  var text;
+  var endpointUsed = '';
+  if (useDeepseek) {
+    if (!/^sk-/i.test(apiKey)) {
+      throw new Error('DeepSeek Key 通常以 sk- 开头。当前 Key 形如 ' + apiKeyHint(apiKey) + '，请到 platform.deepseek.com/api_keys 新建');
+    }
+    endpointUsed = await resolveApiEndpoint('deepseek', baseUrl);
+    text = await callDeepseekResponses(
+      apiKey,
+      endpointUsed,
+      model || 'deepseek-v4-flash',
+      prompt,
+      64
+    );
+  } else {
+    endpointUsed = await resolveApiEndpoint(provider, baseUrl);
+    switch (provider) {
+      case 'openai':
+        text = await callOpenAICompatible(apiKey, endpointUsed, model || 'gpt-4o-mini', prompt, 16, 'OpenAI');
+        break;
+      case 'claude':
+        text = await callClaude(apiKey, endpointUsed, model || 'claude-sonnet-4-20250514', prompt, 16);
+        break;
+      case 'kimi':
+        text = await callOpenAICompatible(apiKey, endpointUsed, model || 'moonshot-v1-8k', prompt, 16, 'Kimi');
+        break;
+      case 'zhipu':
+        text = await callOpenAICompatible(apiKey, endpointUsed, model || 'glm-4-flash', prompt, 16, '智谱');
+        break;
+      default:
+        throw new Error('不支持的模型: ' + provider + '（请重新加载扩展到最新版）');
+    }
+  }
+  return {
+    preview: String(text || '').slice(0, 80),
+    endpoint: endpointUsed,
+    keyHint: apiKeyHint(apiKey),
+  };
+}
+
+// 测试时写入 Key（与 popup 加密逻辑一致，避免重复依赖 popup）
+async function encryptApiKeyForTest(plaintext) {
+  var key = await getOrCreateEncryptionKey();
+  var iv = crypto.getRandomValues(new Uint8Array(12));
+  var encoded = new TextEncoder().encode(plaintext);
+  var cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, encoded);
+  return { iv: Array.from(iv), data: Array.from(new Uint8Array(cipher)) };
+}
 
 // ── History persistence ──────────────────────────────────────────────────────
 
@@ -532,7 +759,7 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
       throw new Error('请先在插件设置中填写 API Key');
     }
     try {
-      apiKey = await decryptApiKey(localData.encryptedApiKey);
+      apiKey = normalizeApiKey(await decryptApiKey(localData.encryptedApiKey));
     } catch (_) {
       throw new Error('API Key 解密失败，请重新保存 API Key');
     }
@@ -544,27 +771,46 @@ async function handleTLDRRequest(tweetData, articleUrl, quotedTweetUrl) {
   const hasQuotedFull = !!(quotedFullContent && quotedFullContent.body);
   const prompt = buildPrompt(tweetData, articleContent, quotedFullContent, settings.language, isArticle, hasQuotedFull);
   const maxTokens = (isArticle || hasQuotedFull) ? 2000 : 1000;
-  const endpoint = await resolveApiEndpoint(settings.provider, settings.baseUrl);
+  const provider = settings.provider || 'openai';
+  const modelName = settings.model || '';
+  const baseUrl = settings.baseUrl || '';
+  // 只要配置指向 DeepSeek，就走官方 Responses API（避免旧 SW / 误选 openai 兼容模式）
+  const useDeepseek =
+    provider === 'deepseek' ||
+    /deepseek/i.test(modelName) ||
+    /deepseek\.com/i.test(baseUrl);
 
   let tldr;
-  switch (settings.provider) {
-    case 'openai':
-      tldr = await callOpenAICompatible(apiKey, endpoint, settings.model || 'gpt-4o-mini', prompt, maxTokens, 'OpenAI');
-      break;
-    case 'claude':
-      tldr = await callClaude(apiKey, endpoint, settings.model || 'claude-sonnet-4-20250514', prompt, maxTokens);
-      break;
-    case 'kimi':
-      tldr = await callOpenAICompatible(apiKey, endpoint, settings.model || 'moonshot-v1-8k', prompt, maxTokens, 'Kimi');
-      break;
-    case 'zhipu':
-      tldr = await callOpenAICompatible(apiKey, endpoint, settings.model || 'glm-4-flash', prompt, maxTokens, '智谱');
-      break;
-    case 'local-claude':
-      tldr = await callLocalClaude(prompt);
-      break;
-    default:
-      throw new Error('不支持的模型: ' + settings.provider);
+  if (useDeepseek) {
+    const endpoint = await resolveApiEndpoint('deepseek', baseUrl);
+    tldr = await callDeepseekResponses(
+      apiKey,
+      endpoint,
+      modelName || 'deepseek-v4-flash',
+      prompt,
+      maxTokens
+    );
+  } else {
+    const endpoint = await resolveApiEndpoint(provider, baseUrl);
+    switch (provider) {
+      case 'openai':
+        tldr = await callOpenAICompatible(apiKey, endpoint, modelName || 'gpt-4o-mini', prompt, maxTokens, 'OpenAI');
+        break;
+      case 'claude':
+        tldr = await callClaude(apiKey, endpoint, modelName || 'claude-sonnet-4-20250514', prompt, maxTokens);
+        break;
+      case 'kimi':
+        tldr = await callOpenAICompatible(apiKey, endpoint, modelName || 'moonshot-v1-8k', prompt, maxTokens, 'Kimi');
+        break;
+      case 'zhipu':
+        tldr = await callOpenAICompatible(apiKey, endpoint, modelName || 'glm-4-flash', prompt, maxTokens, '智谱');
+        break;
+      case 'local-claude':
+        tldr = await callLocalClaude(prompt);
+        break;
+      default:
+        throw new Error('不支持的模型: ' + provider + '（请重新加载扩展到 1.0.2+，并选择 DeepSeek 官方）');
+    }
   }
 
   return { tldr, articleContent, quotedFullContent, isArticle, mode: settings.mdMode };
@@ -583,6 +829,14 @@ async function resolveApiEndpoint(provider, baseUrl) {
   await ensureBaseUrlPermission(parsed.origin);
 
   var path = parsed.pathname.replace(/\/+$/, '');
+
+  // DeepSeek：统一走官方 Responses API（/responses）
+  if (provider === 'deepseek') {
+    if (/\/responses$/i.test(path)) return parsed.origin + path;
+    // 兼容用户误填 /v1 或 /chat/completions
+    return parsed.origin + '/responses';
+  }
+
   // If the path already ends with the full API route, use it as-is
   if (/\/v\d+\/(chat\/completions|messages)$/i.test(path)) {
     return parsed.origin + path;
@@ -918,18 +1172,20 @@ function buildPrompt(tweetData, articleContent, quotedFullContent, language, isA
 // Shared caller for OpenAI-compatible APIs (OpenAI, Kimi, Zhipu all use the
 // same request/response format: messages array, choices[0].message.content).
 async function callOpenAICompatible(apiKey, endpoint, model, prompt, maxTokens, providerLabel) {
+  var body = {
+    model: model,
+    messages: [
+      { role: 'system', content: prompt.system },
+      { role: 'user', content: prompt.user },
+    ],
+    max_tokens: maxTokens,
+    temperature: 0.3,
+  };
+
   var res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
-    body: JSON.stringify({
-      model: model,
-      messages: [
-        { role: 'system', content: prompt.system },
-        { role: 'user', content: prompt.user },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.3,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     var err = await res.json().catch(function () { return {}; });
@@ -939,7 +1195,95 @@ async function callOpenAICompatible(apiKey, endpoint, model, prompt, maxTokens, 
   if (!data.choices || !data.choices[0] || !data.choices[0].message) {
     throw new Error(providerLabel + ' API returned unexpected response format');
   }
-  return data.choices[0].message.content;
+  var message = data.choices[0].message;
+  var content = message.content;
+  if (typeof content === 'string' && content.trim()) return content;
+  if (typeof message.reasoning_content === 'string' && message.reasoning_content.trim()) {
+    return message.reasoning_content;
+  }
+  throw new Error(providerLabel + ' API 返回空内容，请检查模型名与 Base URL');
+}
+
+// DeepSeek 官方 Responses API：POST /responses
+// 参考：https://api-docs.deepseek.com/api/create-response/
+async function callDeepseekResponses(apiKey, endpoint, model, prompt, maxTokens) {
+  var url = endpoint;
+  // 防御：若仍指向 chat/completions，强制改到 /responses
+  if (/chat\/completions/i.test(url) || /\/v\d+(\/|$)/i.test(url)) {
+    try {
+      url = new URL(url).origin + '/responses';
+    } catch (_) {
+      url = 'https://api.deepseek.com/responses';
+    }
+  }
+  if (!/\/responses$/i.test(url.replace(/\/+$/, ''))) {
+    try {
+      url = new URL(url).origin + '/responses';
+    } catch (_) {
+      url = 'https://api.deepseek.com/responses';
+    }
+  }
+
+  var body = {
+    model: model || 'deepseek-v4-flash',
+    instructions: prompt.system || '',
+    input: prompt.user || '',
+    max_output_tokens: maxTokens || 1000,
+    // 摘要场景关闭 thinking，降低延迟与空 content 风险
+    reasoning: { effort: 'none' },
+    temperature: 0.3,
+  };
+
+  var res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+    body: JSON.stringify(body),
+  });
+  var data = await res.json().catch(function () { return {}; });
+  if (!res.ok) {
+    var msg =
+      (data.error && data.error.message) ||
+      (data.message) ||
+      ('DeepSeek Responses API error: ' + res.status);
+    throw new Error(msg);
+  }
+  if (data.status === 'failed') {
+    throw new Error((data.error && data.error.message) || 'DeepSeek Responses API failed');
+  }
+
+  // SDK 便利字段；原生 JSON 也可能带 output_text
+  if (typeof data.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  var texts = [];
+  var items = Array.isArray(data.output) ? data.output : [];
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (!item || item.type !== 'message' || !Array.isArray(item.content)) continue;
+    for (var j = 0; j < item.content.length; j++) {
+      var part = item.content[j];
+      if (part && part.type === 'output_text' && typeof part.text === 'string' && part.text.trim()) {
+        texts.push(part.text.trim());
+      }
+    }
+  }
+  if (texts.length) return texts.join('\n\n');
+
+  // 兜底：若只返回了 reasoning item
+  for (var k = 0; k < items.length; k++) {
+    var rItem = items[k];
+    if (!rItem || rItem.type !== 'reasoning' || !Array.isArray(rItem.content)) continue;
+    for (var m = 0; m < rItem.content.length; m++) {
+      var rPart = rItem.content[m];
+      if (rPart && typeof rPart.text === 'string' && rPart.text.trim()) {
+        texts.push(rPart.text.trim());
+      }
+    }
+  }
+  if (texts.length) return texts.join('\n\n');
+
+  throw new Error('DeepSeek Responses API 返回空内容，请检查 API Key 与模型名（仅支持 deepseek-v4-flash）');
 }
 
 // Claude uses a different request/response format (Anthropic Messages API):

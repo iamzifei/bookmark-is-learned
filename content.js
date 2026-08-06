@@ -12,32 +12,79 @@
   let currentTheme = 'auto'; // 'auto' | 'light' | 'dark'
   let currentMode = 'tldr'; // 'tldr' | 'original'
   let aiEnabled = true;
+  let learnObs = null;
+  let contextDead = false;
+
+  function isExtensionAlive() {
+    try {
+      return !!(chrome.runtime && chrome.runtime.id);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function markContextDead(reason) {
+    if (contextDead) return;
+    contextDead = true;
+    try {
+      if (learnObs) {
+        learnObs.disconnect();
+        learnObs = null;
+      }
+    } catch (_) {}
+    try {
+      showReloadBanner(reason || '扩展已更新，请刷新本页');
+    } catch (_) {}
+  }
+
+  function showReloadBanner(text) {
+    if (!document.body) return;
+    if (document.querySelector('.btl-reload-banner')) return;
+    const banner = document.createElement('div');
+    banner.className = 'btl-reload-banner';
+    banner.textContent = text + '（点此刷新）';
+    banner.addEventListener('click', () => location.reload());
+    document.body.appendChild(banner);
+  }
 
   // ── Theme & mode management ───────────────────────────────────────────────
 
-  // Load initial theme and mode preferences from storage
-  chrome.storage.sync.get({ theme: 'auto', mdMode: 'tldr', aiEnabled: true }, function (data) {
-    currentTheme = data.theme || 'auto';
-    currentMode = data.mdMode || 'tldr';
-    aiEnabled = data.aiEnabled !== false;
-    applyThemeToContainer();
-  });
-
-  // Listen for setting changes from the popup
-  chrome.storage.onChanged.addListener(function (changes, area) {
-    if (area === 'sync' && changes.theme) {
-      currentTheme = changes.theme.newValue || 'auto';
+  try {
+    chrome.storage.sync.get({ theme: 'auto', mdMode: 'tldr', aiEnabled: true }, function (data) {
+      if (chrome.runtime.lastError || !isExtensionAlive()) {
+        markContextDead('扩展上下文已失效，请刷新本页');
+        return;
+      }
+      currentTheme = data.theme || 'auto';
+      currentMode = data.mdMode || 'tldr';
+      aiEnabled = data.aiEnabled !== false;
       applyThemeToContainer();
-    }
-    if (area === 'sync' && changes.mdMode) {
-      currentMode = changes.mdMode.newValue || 'tldr';
-    }
-    if (area === 'sync' && changes.aiEnabled) {
-      aiEnabled = changes.aiEnabled.newValue !== false;
-    }
-  });
+    });
+  } catch (_) {
+    markContextDead('扩展上下文已失效，请刷新本页');
+  }
 
-  // Apply theme class to the card container element
+  try {
+    chrome.storage.onChanged.addListener(function (changes, area) {
+      if (!isExtensionAlive()) {
+        markContextDead('扩展已重新加载，请刷新本页');
+        return;
+      }
+      if (area === 'sync' && changes.theme) {
+        currentTheme = changes.theme.newValue || 'auto';
+        applyThemeToContainer();
+      }
+      if (area === 'sync' && changes.mdMode) {
+        currentMode = changes.mdMode.newValue || 'tldr';
+      }
+      if (area === 'sync' && changes.aiEnabled) {
+        aiEnabled = changes.aiEnabled.newValue !== false;
+      }
+    });
+  } catch (_) {
+    markContextDead('扩展上下文已失效，请刷新本页');
+  }
+
   function applyThemeToContainer() {
     if (!cardContainer) return;
     cardContainer.classList.remove('btl-auto', 'btl-light', 'btl-dark');
@@ -46,27 +93,114 @@
 
   // ── Bookmark click detection ──────────────────────────────────────────────
 
+  function eventElement(event) {
+    const t = event.target;
+    if (!t) return null;
+    return t.nodeType === 1 ? t : t.parentElement;
+  }
+
   document.addEventListener('click', (event) => {
-    const bookmarkBtn = findAncestorByTestId(event.target, 'bookmark');
-    if (!bookmarkBtn) return;
+    try {
+      if (contextDead || !isExtensionAlive()) {
+        markContextDead('扩展已重新加载，请刷新本页');
+        return;
+      }
 
-    // Only fire when adding a bookmark, not when removing one.
-    // X uses "removeBookmark" for the un-bookmark button.
-    const removeBtn = findAncestorByTestId(event.target, 'removeBookmark');
-    if (removeBtn) return;
+      const el = eventElement(event);
+      if (!el || typeof el.closest !== 'function') return;
 
-    const article = bookmarkBtn.closest('article[data-testid="tweet"]');
-    if (!article) return;
+      const learnBtn = el.closest('.btl-learn-btn');
+      if (learnBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const article = learnBtn.closest('article[data-testid="tweet"]');
+        if (!article) return;
+        const cardId = 'btl-' + (++cardSeq);
+        createLoadingCard(cardId);
+        processBookmark(article, cardId);
+        return;
+      }
 
-    const cardId = 'btl-' + (++cardSeq);
-    createLoadingCard(cardId);
-    processBookmark(article, cardId);
+      const bookmarkBtn = findAncestorByTestId(el, 'bookmark');
+      const removeBtn = findAncestorByTestId(el, 'removeBookmark');
+      if (!bookmarkBtn && !removeBtn) return;
+
+      const article = (bookmarkBtn || removeBtn).closest('article[data-testid="tweet"]');
+      if (!article) return;
+
+      const cardId = 'btl-' + (++cardSeq);
+      createLoadingCard(cardId);
+      processBookmark(article, cardId);
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      if (/Extension context invalidated/i.test(msg)) {
+        markContextDead('扩展已重新加载，请刷新本页');
+      } else {
+        console.warn('[btl] click handler:', msg);
+      }
+    }
   }, true);
+
+  function injectLearnButtons(root) {
+    if (contextDead || !isExtensionAlive()) return;
+    const articles = (root || document).querySelectorAll?.('article[data-testid="tweet"]') || [];
+    articles.forEach((article) => {
+      if (article.querySelector('.btl-learn-btn')) return;
+      const group =
+        article.querySelector('[role="group"]') ||
+        article.querySelector('[data-testid="bookmark"]')?.parentElement?.parentElement ||
+        article.querySelector('[data-testid="removeBookmark"]')?.parentElement?.parentElement;
+      if (!group) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btl-learn-btn';
+      btn.textContent = '学到';
+      btn.title = '生成摘要并保存 Markdown（无需重新收藏）';
+      group.appendChild(btn);
+    });
+  }
+
+  function startLearnButtonObserver() {
+    if (contextDead) return;
+    injectLearnButtons(document);
+    if (!document.body) {
+      setTimeout(startLearnButtonObserver, 300);
+      return;
+    }
+    learnObs = new MutationObserver((mutations) => {
+      if (contextDead || !isExtensionAlive()) {
+        markContextDead('扩展已重新加载，请刷新本页');
+        return;
+      }
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1) injectLearnButtons(node);
+        }
+      }
+    });
+    learnObs.observe(document.body, { childList: true, subtree: true });
+
+    if (isExtensionAlive()) {
+      const badge = document.createElement('div');
+      badge.className = 'btl-loaded-badge';
+      badge.textContent = '收藏到就是学到 · 已加载';
+      document.body.appendChild(badge);
+      setTimeout(() => {
+        try { badge.remove(); } catch (_) {}
+      }, 4000);
+    }
+  }
+  startLearnButtonObserver();
 
   // ── Main async flow (per card) ────────────────────────────────────────────
 
   async function processBookmark(article, cardId) {
     try {
+      if (contextDead || !isExtensionAlive()) {
+        updateCard(cardId, '扩展已重新加载，请刷新本页后再试', true);
+        markContextDead('扩展已重新加载，请刷新本页');
+        return;
+      }
       await expandShowMore(article);
       const tweetData = extractTweetContent(article);
       const articleUrl = detectArticleUrl(article);
@@ -79,11 +213,20 @@
         return;
       }
 
+      if (!isExtensionAlive()) {
+        updateCard(cardId, '扩展已重新加载，请刷新本页后再试', true);
+        markContextDead('扩展已重新加载，请刷新本页');
+        return;
+      }
       chrome.runtime.sendMessage(
         { type: 'GENERATE_TLDR', tweetData, articleUrl, quotedTweetUrl },
         (response) => {
           if (chrome.runtime.lastError) {
-            updateCard(cardId, '扩展连接失败，请刷新页面', true);
+            const errMsg = chrome.runtime.lastError.message || '';
+            if (/invalidated/i.test(errMsg)) {
+              markContextDead('扩展已重新加载，请刷新本页');
+            }
+            updateCard(cardId, '扩展连接失败：' + errMsg + '。请刷新页面后重试', true);
             return;
           }
           if (response?.success) {
@@ -98,11 +241,15 @@
         }
       );
     } catch (err) {
-      updateCard(cardId, '处理出错: ' + err.message, true);
+      const msg = err && err.message ? err.message : String(err);
+      if (/Extension context invalidated/i.test(msg)) {
+        markContextDead('扩展已重新加载，请刷新本页');
+        updateCard(cardId, '扩展已重新加载，请刷新本页后再试', true);
+      } else {
+        updateCard(cardId, '处理出错: ' + msg, true);
+      }
     }
   }
-
-  // ── DOM helpers ───────────────────────────────────────────────────────────
 
   function findAncestorByTestId(el, testId) {
     while (el && el !== document.body) {
@@ -111,8 +258,6 @@
     }
     return null;
   }
-
-  // ── Show-more expansion ───────────────────────────────────────────────────
 
   async function expandShowMore(article) {
     const links = article.querySelectorAll('[data-testid="tweet-text-show-more-link"]');
@@ -128,8 +273,6 @@
       setTimeout(() => { obs.disconnect(); resolve(); }, 3000);
     });
   }
-
-  // ── Content extraction ────────────────────────────────────────────────────
 
   function extractTweetContent(article) {
     const tweetTextEl = article.querySelector('[data-testid="tweetText"]');
@@ -151,28 +294,22 @@
 
     let fallbackText = '';
     if (!text && !cardText) {
-      // For X Articles: prefer heading-based extraction to avoid metadata noise
-      // (author info, engagement metrics, bio that duplicate the markdown header).
-      // Article body is the parent of the first h1 section heading.
       const h1s = article.querySelectorAll('h1');
       if (h1s.length >= 2) {
         const bodyContainer = h1s[0].parentElement;
         if (bodyContainer && bodyContainer.innerText.trim().length > 200) {
           const clone = bodyContainer.cloneNode(true);
-          // Remove "Upgrade to Premium" banners and similar noise
           clone.querySelectorAll('[role="status"]').forEach((s) => s.remove());
           fallbackText = clone.innerText.trim();
         }
       }
       if (!fallbackText) {
         const clone = article.cloneNode(true);
-        // Remove ALL engagement metric groups
         clone.querySelectorAll('[role="group"]').forEach((g) => g.remove());
         fallbackText = clone.innerText.trim();
       }
     }
 
-    // Extract the tweet's own permalink (timestamp link, not inside quoted tweet)
     let tweetUrl = window.location.href;
     const allStatusLinks = article.querySelectorAll('a[href*="/status/"]');
     for (const link of allStatusLinks) {
@@ -184,7 +321,6 @@
       }
     }
 
-    // Extract engagement metrics (replies, retweets, likes, views)
     const metrics = extractEngagementMetrics(article);
 
     return {
@@ -193,8 +329,6 @@
     };
   }
 
-  // Collect external links referenced by the bookmarked post itself.
-  // This covers both inline links and "card preview" links.
   function collectReferencedUrls(article, quotedTweet) {
     const links = article.querySelectorAll('a[href]');
     const seen = new Set();
@@ -217,7 +351,6 @@
       const host = (parsed.hostname || '').toLowerCase();
       const path = parsed.pathname || '';
 
-      // Ignore X internal navigation links that are not post references.
       if (host === 'x.com' || host === 'twitter.com' || host === 'www.twitter.com') {
         if (
           /^\/[^/]+\/status\/\d+/.test(path)
@@ -238,16 +371,11 @@
     return urls;
   }
 
-  // ── Engagement metrics extraction ──────────────────────────────────────────
-
   function extractEngagementMetrics(article) {
     var metrics = { replies: '0', retweets: '0', likes: '0', views: '0' };
     var group = article.querySelector('[role="group"]');
     if (!group) return metrics;
 
-    // Each action button exposes its count in the aria-label attribute,
-    // e.g. "123 replies. Reply", "5 reposts. Repost", "10 likes. Like".
-    // If the count is zero X omits the number (just "Reply", "Like", etc.).
     var testIds = { reply: 'replies', retweet: 'retweets', like: 'likes' };
     for (var tid in testIds) {
       var btn = group.querySelector('[data-testid="' + tid + '"]');
@@ -258,16 +386,12 @@
       }
     }
 
-    // Views count: X puts it in an analytics link or a standalone element
-    // outside the main action buttons. Try analytics link first, then
-    // look for any aria-label mentioning "view" near the action bar.
     var viewLink = article.querySelector('a[href*="/analytics"]');
     if (viewLink) {
       var viewLabel = viewLink.getAttribute('aria-label') || '';
       var vm = viewLabel.match(/([\d,]+)/);
       if (vm) metrics.views = vm[1].replace(/,/g, '');
     } else {
-      // Fallback: some X layouts show views as a separate span in the group
       var allLabels = group.querySelectorAll('[aria-label]');
       for (var i = 0; i < allLabels.length; i++) {
         var al = allLabels[i].getAttribute('aria-label') || '';
@@ -281,25 +405,15 @@
     return metrics;
   }
 
-  // ── URL detection ─────────────────────────────────────────────────────────
-
   function detectArticleUrl(article) {
-    // Only detect X Articles by their distinctive URL pattern (/i/article/ or /articles/).
-    // Previously a broad data-testid*="article" CSS selector caused false positives,
-    // matching non-article elements and sending regular tweet URLs to fetchPageContent,
-    // which then grabbed unrelated tweets from the page as "article content".
     const links = article.querySelectorAll('a[href]');
     for (const link of links) {
       const href = link.href || link.getAttribute('href') || '';
       if (/\/(articles?)\//i.test(href)) {
-        // Strip media/photo/video suffixes — X Article image links look like
-        // /user/article/123/media/456 but the article page is /user/article/123
         const cleanHref = href.replace(/\/(media|photo|video)\/.*$/, '');
         return cleanHref.startsWith('/') ? 'https://x.com' + cleanHref : cleanHref;
       }
     }
-    // Fallback: look for X Article-specific data-testid values (exact matches only).
-    // These are the selectors used by extractPageContent to find article bodies.
     const articleTestIds = [
       '[data-testid="noteBody"]',
       '[data-testid="richTextContainer"]',
@@ -330,8 +444,6 @@
     return null;
   }
 
-  // ── Card container & stacking ─────────────────────────────────────────────
-
   function ensureContainer() {
     if (!cardContainer || !cardContainer.parentNode) {
       cardContainer = document.createElement('div');
@@ -343,7 +455,6 @@
 
   function createLoadingCard(cardId) {
     const container = ensureContainer();
-    // Auto-dismiss oldest if at capacity
     while (activeCards.length >= MAX_VISIBLE_CARDS) {
       dismissCard(activeCards[0].id);
     }
@@ -352,15 +463,19 @@
     card.className = 'btl-tldr-card';
     card.dataset.cardId = cardId;
 
-    // Header
     const header = document.createElement('div');
     header.className = 'btl-card-header';
     const title = document.createElement('span');
     title.className = 'btl-card-title';
-    // Use extension icon instead of emoji
     const iconImg = document.createElement('img');
     iconImg.className = 'btl-card-title-icon';
-    iconImg.src = chrome.runtime.getURL('icons/icon48.png');
+    try {
+      if (!isExtensionAlive()) throw new Error('Extension context invalidated.');
+      iconImg.src = chrome.runtime.getURL('icons/icon48.png');
+    } catch (_) {
+      markContextDead('扩展已重新加载，请刷新本页');
+      iconImg.alt = '';
+    }
     iconImg.alt = '';
     title.appendChild(iconImg);
     title.appendChild(document.createTextNode('收藏到就是学到'));
@@ -371,7 +486,6 @@
     header.appendChild(title);
     header.appendChild(closeBtn);
 
-    // Body — loading state
     const body = document.createElement('div');
     body.className = 'btl-card-body';
     const wrap = document.createElement('div');
@@ -398,7 +512,6 @@
     const card = info.element;
     if (isError) card.classList.add('btl-error');
 
-    // Replace body contents
     const body = card.querySelector('.btl-card-body');
     body.textContent = '';
 
@@ -407,7 +520,6 @@
     renderFormattedTLDR(contentEl, content || '');
     body.appendChild(contentEl);
 
-    // Original tweet link (if available and not an error)
     if (!isError && tweetUrl) {
       const linkWrap = document.createElement('div');
       linkWrap.className = 'btl-original-link';
@@ -420,7 +532,6 @@
       body.appendChild(linkWrap);
     }
 
-    // Auto-dismiss after 60 s
     info.timerId = setTimeout(() => dismissCard(cardId), 60000);
   }
 
@@ -435,8 +546,6 @@
     }, 300);
     activeCards.splice(idx, 1);
   }
-
-  // ── Formatted TLDR rendering ──────────────────────────────────────────────
 
   function renderFormattedTLDR(container, text) {
     const lines = text.split('\n');
@@ -501,12 +610,11 @@
     if (cursor < text.length) el.appendChild(document.createTextNode(text.slice(cursor)));
   }
 
-  // ── Markdown download via <a download> tag ────────────────────────────────
-  // Background sends markdown content here when native host is unavailable.
-  // The HTML download attribute reliably sets filenames on all platforms,
-  // unlike chrome.downloads which ignores the filename param on Windows.
-
   chrome.runtime.onMessage.addListener(function (message) {
+    if (!isExtensionAlive()) {
+      markContextDead('扩展已重新加载，请刷新本页');
+      return;
+    }
     if (message.type === 'SAVE_MARKDOWN') {
       var blob = new Blob([message.markdown], { type: 'text/markdown' });
       var url = URL.createObjectURL(blob);

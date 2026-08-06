@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "收藏到就是学到",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "自动总结你在 X 上收藏的内容，让每次收藏都变成学习",
   "permissions": [
     "storage",
@@ -16,6 +16,7 @@
     "https://api.anthropic.com/*",
     "https://api.moonshot.cn/*",
     "https://open.bigmodel.cn/*",
+    "https://api.deepseek.com/*",
     "https://api.github.com/*"
   ],
   "background": {
@@ -50,8 +51,13 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/icon48.png"],
-      "matches": ["https://x.com/*", "https://twitter.com/*"]
+      "resources": [
+        "icons/icon48.png"
+      ],
+      "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ]
     }
   ]
 }

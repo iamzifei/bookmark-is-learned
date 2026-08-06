@@ -3,11 +3,16 @@
 // Uses safe DOM methods (createElement / textContent) throughout.
 
 const DEFAULT_MODELS = {
+  deepseek: 'deepseek-v4-flash',
   openai: 'gpt-4o-mini',
   claude: 'claude-sonnet-4-20250514',
   kimi: 'moonshot-v1-8k',
   zhipu: 'glm-4-flash',
   'local-claude': '（自动）',
+};
+
+const DEFAULT_BASE_URLS = {
+  deepseek: 'https://api.deepseek.com',
 };
 
 // Theme cycle order: auto → light → dark → auto
@@ -22,9 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('provider').addEventListener('change', (e) => {
     updateModelHint(e.target.value);
     toggleLocalClaudeFields(e.target.value);
+    applyProviderDefaults(e.target.value);
   });
   document.getElementById('toggleKey').addEventListener('click', toggleKeyVisibility);
   document.getElementById('saveBtn').addEventListener('click', saveSettings);
+  document.getElementById('testApiBtn').addEventListener('click', testApiConnection);
   document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
   document.getElementById('themeToggle').addEventListener('click', cycleTheme);
   document.getElementById('autoDownloadMd').addEventListener('change', toggleSavePathVisibility);
@@ -129,6 +136,42 @@ async function migrateAndLoadSettings() {
     var encrypted = await encryptApiKey(syncData.apiKey);
     await chrome.storage.local.set({ encryptedApiKey: encrypted });
     await chrome.storage.sync.remove('apiKey');
+  }
+
+  // 纠正常见 DeepSeek 误配，并迁移到独立 deepseek 提供商
+  var migrated = {};
+  var baseUrlFixed = (syncData.baseUrl || '').trim().replace(/\/+$/, '');
+  if (
+    baseUrlFixed === 'https://platform.deepseek.com' ||
+    baseUrlFixed === 'http://platform.deepseek.com'
+  ) {
+    migrated.baseUrl = 'https://api.deepseek.com';
+    syncData.baseUrl = migrated.baseUrl;
+    baseUrlFixed = migrated.baseUrl;
+  }
+  var modelFixed = (syncData.model || '').trim();
+  if (/^https?:\/\//i.test(modelFixed)) {
+    migrated.model = 'deepseek-v4-flash';
+    syncData.model = migrated.model;
+    modelFixed = migrated.model;
+  }
+  if (
+    syncData.provider === 'openai' &&
+    (/deepseek\.com/i.test(baseUrlFixed) || /deepseek/i.test(modelFixed))
+  ) {
+    migrated.provider = 'deepseek';
+    syncData.provider = 'deepseek';
+    if (!modelFixed || /deepseek\.com/i.test(modelFixed)) {
+      migrated.model = 'deepseek-v4-flash';
+      syncData.model = migrated.model;
+    }
+    if (!baseUrlFixed || /deepseek\.com/i.test(baseUrlFixed)) {
+      migrated.baseUrl = '';
+      syncData.baseUrl = '';
+    }
+  }
+  if (Object.keys(migrated).length) {
+    await chrome.storage.sync.set(migrated);
   }
 
   // Load the encrypted key for display
@@ -309,6 +352,31 @@ function setupTabs() {
 function updateModelHint(provider) {
   document.getElementById('modelHint').textContent =
     '\u9ED8\u8BA4: ' + (DEFAULT_MODELS[provider] || '');
+  var baseHint = document.getElementById('baseUrl').parentElement.querySelector('.hint');
+  if (baseHint) {
+    if (provider === 'deepseek') {
+      baseHint.textContent = '官方走 Responses API（/responses）。Base URL 可留空或填 https://api.deepseek.com；密钥在 platform.deepseek.com → API Keys';
+    } else {
+      baseHint.textContent = '留空使用官方 API 地址，填写后走自定义中转地址';
+    }
+  }
+}
+
+function applyProviderDefaults(provider) {
+  var modelInput = document.getElementById('model');
+  var baseUrlInput = document.getElementById('baseUrl');
+  if (!modelInput.value.trim() && DEFAULT_MODELS[provider] && provider !== 'local-claude') {
+    modelInput.value = DEFAULT_MODELS[provider];
+  }
+  if (provider === 'deepseek') {
+    // 官方渠道：模型与 Base URL 给安全默认值
+    if (!modelInput.value.trim() || /openai|gpt/i.test(modelInput.value)) {
+      modelInput.value = 'deepseek-v4-flash';
+    }
+    if (!baseUrlInput.value.trim() || /platform\.deepseek\.com/i.test(baseUrlInput.value)) {
+      baseUrlInput.value = DEFAULT_BASE_URLS.deepseek;
+    }
+  }
 }
 
 function toggleKeyVisibility() {
@@ -316,9 +384,73 @@ function toggleKeyVisibility() {
   input.type = input.type === 'password' ? 'text' : 'password';
 }
 
+async function testApiConnection() {
+  var btn = document.getElementById('testApiBtn');
+  btn.disabled = true;
+  showStatus('正在测试 API（使用输入框当前 Key）...', 'success');
+  try {
+    // 先把当前表单配置写入 sync，再带上输入框里的 Key 测试
+    // 这样不会因为「换了 Key 但没点保存」而继续测旧密钥
+    var provider = document.getElementById('provider').value;
+    var model = document.getElementById('model').value.trim();
+    var baseUrlInput = document.getElementById('baseUrl').value.trim();
+    var apiKeyPlain = document.getElementById('apiKey').value.trim();
+    var baseUrl = '';
+    if (baseUrlInput) {
+      baseUrl = normalizeBaseUrl(baseUrlInput);
+      if (!baseUrl) {
+        showStatus('Base URL 格式无效', 'error');
+        return;
+      }
+    }
+    await chrome.storage.sync.set({
+      provider: provider,
+      model: model,
+      baseUrl: baseUrl,
+      language: document.getElementById('language').value,
+      mdMode: document.getElementById('mdMode').value,
+      aiEnabled: document.getElementById('aiEnabled').checked,
+      autoDownloadMd: document.getElementById('autoDownloadMd').checked,
+    });
+    if (baseUrl) {
+      await ensureOriginPermission(toOriginPattern(baseUrl));
+    }
+
+    var response = await chrome.runtime.sendMessage({
+      type: 'TEST_API',
+      apiKey: apiKeyPlain,
+      provider: provider,
+      model: model,
+      baseUrl: baseUrl,
+    });
+    if (chrome.runtime.lastError) {
+      showStatus('扩展后台未响应，请重新加载扩展', 'error');
+      return;
+    }
+    if (response && response.success) {
+      var hint = response.keyHint ? (' Key=' + response.keyHint) : '';
+      var ep = response.endpoint ? (' @ ' + response.endpoint) : '';
+      showStatus('API 正常: ' + (response.preview || 'ok') + hint + ep, 'success');
+    } else {
+      showStatus((response && response.error) || 'API 测试失败', 'error');
+    }
+  } catch (err) {
+    showStatus('测试失败: ' + (err.message || String(err)), 'error');
+  } finally {
+    btn.disabled = false;
+    loadDebugInfo();
+  }
+}
+
 async function saveSettings() {
   try {
-    const apiKeyPlain = document.getElementById('apiKey').value.trim();
+    // 规范化：去空白/引号/Bearer，避免 DeepSeek 判 invalid
+    var apiKeyPlain = document.getElementById('apiKey').value
+      .trim()
+      .replace(/^['"`]+|['"`]+$/g, '')
+      .replace(/^Bearer\s+/i, '')
+      .replace(/\s+/g, '');
+    document.getElementById('apiKey').value = apiKeyPlain;
     const baseUrlInput = document.getElementById('baseUrl').value.trim();
 
     var mdMode = document.getElementById('mdMode').value;
@@ -327,6 +459,10 @@ async function saveSettings() {
     var isLocalClaude = selectedProvider === 'local-claude';
     if (!apiKeyPlain && mdMode !== 'original' && aiEnabled && !isLocalClaude) {
       showStatus('\u8BF7\u586B\u5199 API Key', 'error');
+      return;
+    }
+    if (selectedProvider === 'deepseek' && apiKeyPlain && !/^sk-/i.test(apiKeyPlain)) {
+      showStatus('DeepSeek Key 应以 sk- 开头，请确认复制的是 API Keys 页面的密钥', 'error');
       return;
     }
 
@@ -447,7 +583,7 @@ async function loadDebugInfo() {
         mdFolderPath: '',
         aiEnabled: true,
       }),
-      chrome.storage.local.get({ lastSave: null }),
+      chrome.storage.local.get({ lastSave: null, lastError: null, history: [] }),
       chrome.runtime.sendMessage({ type: 'PING_NATIVE_HOST' }).catch(function () { return null; }),
     ]);
 
@@ -468,6 +604,14 @@ async function loadDebugInfo() {
     lines.push('Auto Download: ' + (syncData.autoDownloadMd ? 'on' : 'off'));
     lines.push('AI Enabled: ' + (syncData.aiEnabled !== false ? 'on' : 'off'));
     lines.push('Save Path: ' + (syncData.mdFolderPath || '(downloads folder)'));
+    lines.push('History Count: ' + ((localData.history && localData.history.length) || 0));
+
+    if (localData.lastError && localData.lastError.message) {
+      var errTime = new Date(localData.lastError.timestamp).toLocaleString();
+      lines.push('Last Error: ' + errTime + ' — ' + localData.lastError.message);
+    } else {
+      lines.push('Last Error: (none)');
+    }
 
     if (localData.lastSave) {
       var ls = localData.lastSave;

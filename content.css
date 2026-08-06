@@ -284,6 +284,58 @@
   animation: btl-spin 0.7s linear infinite;
 }
 
+/* ── Per-tweet「学到」按钮 ─────────────────────────────────────────────────── */
+
+.btl-learn-btn {
+  pointer-events: auto;
+  margin-left: 4px;
+  padding: 4px 10px;
+  border: 1px solid rgba(29, 155, 240, 0.45);
+  border-radius: 999px;
+  background: rgba(29, 155, 240, 0.12);
+  color: #1d9bf0;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btl-learn-btn:hover {
+  background: rgba(29, 155, 240, 0.2);
+}
+
+.btl-loaded-badge {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10002;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 20, 25, 0.88);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.btl-reload-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10003;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #f4212e;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(244, 33, 46, 0.35);
+}
+
 /* ── Animations ──────────────────────────────────────────────────────────── */
 
 @keyframes btl-spin {
