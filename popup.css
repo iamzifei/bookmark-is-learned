@@ -643,6 +643,29 @@ select {
   background: var(--accent-active);
 }
 
+.test-api-btn {
+  width: 100%;
+  padding: 9px;
+  margin-top: 8px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.test-api-btn:hover {
+  background: rgba(29, 155, 240, 0.08);
+}
+
+.test-api-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* ── Status message ──────────────────────────────────────────────────────── */
 
 .status {

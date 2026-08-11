@@ -51,6 +51,7 @@
             <div class="form-group">
               <label for="provider">AI 模型</label>
               <select id="provider">
+                <option value="deepseek">DeepSeek（官方）</option>
                 <option value="openai">OpenAI (GPT)</option>
                 <option value="claude">Claude (Anthropic)</option>
                 <option value="kimi">Kimi (月之暗面)</option>
@@ -73,7 +74,7 @@
           <div class="form-group">
             <label for="apiKey">API Key</label>
             <div class="input-wrapper">
-              <input type="password" id="apiKey" placeholder="输入你的 API Key" />
+              <input type="password" id="apiKey" placeholder="DeepSeek 请填 sk- 开头的官方 API Key" />
               <button id="toggleKey" class="toggle-btn" title="显示/隐藏">
                 <svg class="eye-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -171,6 +172,7 @@
 
         <!-- Save button + status at the bottom of all settings -->
         <button id="saveBtn" class="save-btn">保存设置</button>
+        <button id="testApiBtn" class="test-api-btn" type="button">测试 API 连接</button>
         <div id="status" class="status"></div>
 
         <!-- Footer: version + repo link + update badge -->
