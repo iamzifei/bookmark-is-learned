@@ -1,5 +1,7 @@
 # 📚 收藏到就是学到
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2T024VDBG)
+
 > 一款 Chrome 浏览器扩展，在你收藏 X (Twitter) 内容时，自动生成 AI 摘要并保存为本地 Markdown 文件，让每次收藏都变成一次学习。
 
 [English](#english) | 中文
